@@ -88,7 +88,7 @@ export default function JobCard({ job }: JobCardProps) {
 
       <div className="mt-5 pt-4 border-t border-slate-50 flex items-center justify-between">
         <span className="text-xs text-slate-400">
-          Posted on {new Date(job.fetched_at || '').toLocaleDateString()} {/* 假设 id 含日期前缀 */}
+          Posted on {new Date(job.post_at || '').toLocaleDateString()} {/* 假设 id 含日期前缀 */}
         </span>
         <Link 
           href={`/jobs/${job.job_id}`}

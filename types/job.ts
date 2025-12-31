@@ -31,7 +31,7 @@ export interface JobWithCompany {
   tech_stack: string; // SQLite 存为 JSON 字符串
   size: string | null;
   funding_stage: string | null;
-  fetched_at: string;
+  post_at: string;
 }
 
 export interface RiskFlag {
