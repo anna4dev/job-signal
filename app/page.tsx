@@ -1,65 +1,122 @@
-import Image from "next/image";
+import { db } from "@/lib/db";
+import JobCard from "@/components/JobCard";
+import FilterBar from "@/components/FilterBar";
+import { JobWithCompany } from "@/types/job";
+import Pagination from "@/components/Pagination";
 
-export default function Home() {
+type QueryParam = string | number | null;
+export const revalidate = 300;
+
+export default async function JobsPage({
+  searchParams,
+}: {
+  searchParams: { [key: string]: string | undefined };
+}) {
+  // 1. Handle filtering logic (Server-side)
+  const sParams = await searchParams;
+  const currentPage = Number(sParams.page) || 1;
+  const pageSize = 10;
+  const offset = (currentPage - 1) * pageSize;
+
+  const searchQuery = sParams.q || "";
+  const isRemote = sParams.remote === "true";
+  const hasVisa = sParams.visa === "true";
+
+  const days = Number(sParams.days) || null;
+  const level = sParams.level || null;
+  const minSalary = Number(sParams.min_salary) || 0;
+
+  // 2. Build base filter conditions
+  let whereClause = `WHERE (j.role_title LIKE ? OR c.company_name LIKE ?)`;
+  const params: QueryParam[] = [`%${searchQuery}%`, `%${searchQuery}%`];
+
+  if (isRemote) {
+    whereClause += ` AND j.location_remote = ?`;
+    params.push(1);
+  }
+  if (hasVisa) {
+    whereClause += ` AND j.location_visa_supported = ?`;
+    params.push(1);
+  }
+  // Filter by time (SQLite using date function)
+  if (days) {
+    whereClause += ` AND j.post_at >= date('now', ?)`;
+    params.push(`-${days} days`);
+  }
+
+  // Filter by job level
+  if (level) {
+    whereClause += ` AND j.level = ?`;
+    params.push(level);
+  }
+
+  // Filter by salary
+  if (minSalary > 0) {
+    // If the max salary of the job doesn't meet the user's minimum requirement, filter it out
+    whereClause += ` AND j.salary_max >= ?`;
+    params.push(minSalary);
+  }
+
+  // 3. Get total count for pagination calculation
+  const [countRes, jobsRes] = await db.batch(
+    [
+      {
+        sql: `SELECT COUNT(*) as total FROM jobs_structured j JOIN company_structured c ON j.company_id = c.company_id ${whereClause}`,
+        args: params,
+      },
+      {
+        sql: `SELECT j.*, c.company_name, c.tech_stack FROM jobs_structured j JOIN company_structured c ON j.company_id = c.company_id ${whereClause} ORDER BY j.post_at DESC LIMIT ? OFFSET ?`,
+        args: [...params, pageSize, offset],
+      },
+    ],
+    "read"
+  );
+
+  const total = Number(countRes.rows[0].total);
+  const totalPages = Math.ceil(total / pageSize);
+  const jobs = jobsRes.rows as unknown as JobWithCompany[];
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div className="max-w-6xl mx-auto px-4 py-8">
+      <header className="mb-10">
+        <h1 className="text-3xl font-bold tracking-tight">
+          Hacker News Jobs Explorer
+        </h1>
+        <p className="text-gray-500 mt-2">
+          Structured presentation of HN &quot;Who&apos;s Hiring&quot; listings
+        </p>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        {/* Left Sidebar: Filters */}
+        <aside className="lg:col-span-1">
+          <FilterBar />
+        </aside>
+
+        {/* Job List */}
+        <main className="lg:col-span-3 space-y-4">
+          <div className="flex justify-between items-center text-sm text-gray-500 mb-4">
+            <span>Found {total} matching jobs</span>
+          </div>
+
+          {jobs.map((job: JobWithCompany) => (
+            <JobCard key={job.job_id} job={job} />
+          ))}
+
+          {/* 5. Pagination Controller */}
+          {totalPages > 1 && (
+            <Pagination currentPage={currentPage} totalPages={totalPages} />
+          )}
+
+          {jobs.length === 0 && (
+            <div className="text-center py-20 bg-gray-50 rounded-lg border-2 border-dashed">
+              <p className="text-gray-400">
+                No matching jobs found. Try adjusting your filters.
+              </p>
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
