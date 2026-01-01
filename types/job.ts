@@ -19,6 +19,7 @@ export interface JobWithCompany {
   location_city: string | null;
   location_country: string | null;
   location_remote: number; // SQLite 中布尔值通常存为 0/1
+  location_timezone: string | null;
   location_visa_supported: number;
   salary_min: number | null;
   salary_max: number | null;
