@@ -127,13 +127,11 @@ export default async function JobDetailPage({
                   {job.level}
                 </span>
 
-                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-wider">
-                  {`${
-                    job.location_remote === 1
-                      ? "Remote" + (job.location_timezone || "")
-                      : ""
-                  }`}
-                </span>
+                {job.location_remote === 1 && (
+                  <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-wider">
+                    {`${"Remote" + (job.location_timezone || "")}`}
+                  </span>
+                )}
               </div>
             </div>
 
