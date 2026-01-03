@@ -7,6 +7,26 @@ import Pagination from "@/components/Pagination";
 type QueryParam = string | number | null;
 export const revalidate = 300;
 
+export const metadata = {
+  title: "Hacker News Who's Hiring | Structured & Filterable Job Board",
+  description:
+    "Browse the latest Hacker News Who's Hiring thread with powerful filters. Search by tech stack, industry, and company size in a clean, structured interface.",
+  keywords: [
+    "Hacker News",
+    "Who's Hiring",
+    "Software Engineer Jobs",
+    "Tech Jobs Search",
+    "Remote Jobs",
+  ],
+  openGraph: {
+    title: "Hacker News Who's Hiring - Structured Interface",
+    description:
+      "Stop scrolling long threads. Find your next tech job with our structured HN job board.",
+    type: "website",
+    // images: ['/og-image.png'], // 建议以后做一个漂亮的预览图
+  },
+};
+
 export default async function JobsPage({
   searchParams,
 }: {

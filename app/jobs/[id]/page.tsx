@@ -1,8 +1,29 @@
 import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
+import { Metadata } from "next";
 import Link from "next/link";
 import { JobFullDetail, RiskFlag, RecentNews } from "@/types/job";
 export const revalidate = 300;
+
+export async function generateMetadata({
+  params,
+}: {
+  params: { id: string };
+}): Promise<Metadata> {
+  const id = (await params).id;
+  // 从 Turso 查询职位详情
+  const result = await db.execute({
+    sql: "SELECT j.role_title, c.company_name FROM jobs_structured j JOIN company_structured c ON c.job_raw_id = j.job_raw_id WHERE job_id =  ?",
+    args: [id],
+  });
+  const job = result.rows[0];
+  if (!job) return { title: "Job Not Found" };
+  return {
+    title: `${job.role_title} at ${job.company_name} | HN Who's Hiring`,
+    description: `Check out this ${job.role_title} position at ${job.company_name} from the latest Hacker News Who's Hiring thread.`,
+  };
+}
+
 export default async function JobDetailPage({
   params,
 }: {
@@ -59,6 +80,40 @@ export default async function JobDetailPage({
 
     // 3. Display parts if available, otherwise fallback
     return parts.length > 0 ? parts.join(", ") : "Location N/A";
+  };
+
+  // 2. 准备 JSON-LD 数据对象
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "JobPosting",
+    title: job.role_title,
+    description: job.level, // 确保这是纯文本或符合规范的 HTML
+    datePosted: new Date(job.post_at as string).toISOString(),
+    hiringOrganization: {
+      "@type": "Organization",
+      name: job.company_name,
+      sameAs: sourceLinks.website, // 如果你有公司官网链接
+    },
+    jobLocation: {
+      "@type": "Place",
+      address: {
+        "@type": "PostalAddress",
+        addressLocality: displayLocation(),
+      },
+    },
+    // 如果有薪资数据
+    baseSalary: job.salary_min
+      ? {
+          "@type": "MonetaryAmount",
+          currency: "USD",
+          value: {
+            "@type": "QuantitativeValue",
+            minValue: job.salary_min,
+            maxValue: job.salary_max,
+            unitText: "YEAR",
+          },
+        }
+      : undefined,
   };
 
   return (
@@ -332,6 +387,11 @@ export default async function JobDetailPage({
           </div>
         </div>
       </main>
+      {/* 3. 将脚本注入页面 */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
     </div>
   );
 }
