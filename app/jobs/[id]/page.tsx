@@ -13,7 +13,7 @@ export async function generateMetadata({
   const id = (await params).id;
   // 从 Turso 查询职位详情
   const result = await db.execute({
-    sql: "SELECT j.role_title, c.company_name FROM jobs_structured j JOIN company_structured c ON c.job_raw_id = j.job_raw_id WHERE job_id =  ?",
+    sql: "SELECT j.role_title, c.company_name FROM jobs_structured j JOIN company_structured c ON c.company_id = j.company_id WHERE job_id =  ?",
     args: [id],
   });
   const job = result.rows[0];
