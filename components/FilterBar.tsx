@@ -11,6 +11,8 @@ export default function FilterBar() {
     updates: Record<string, string | boolean | undefined>
   ) => {
     const params = new URLSearchParams(searchParams.toString());
+    params.set("page", "1");
+
     Object.entries(updates).forEach(([key, value]) => {
       if (value === undefined || value === false || value === "") {
         params.delete(key);
@@ -44,6 +46,103 @@ export default function FilterBar() {
         </div>
       </div>
 
+      {/* 2. Location Scope (New) */}
+      <div className="space-y-3">
+        <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1 block">
+          Job Location
+        </label>
+        <div className="mt-2 flex flex-col gap-3">
+          <label className="flex items-center gap-2 cursor-pointer group">
+            <input
+              type="checkbox"
+              className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              checked={searchParams.get("usa") === "true"}
+              onChange={(e) => updateFilters({ usa: e.target.checked })}
+            />
+            <span className="text-sm text-slate-600 group-hover:text-slate-900">
+              United States
+            </span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer group">
+            <input
+              type="checkbox"
+              className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              checked={searchParams.get("intl") === "true"}
+              onChange={(e) => updateFilters({ intl: e.target.checked })}
+            />
+            <span className="text-sm text-slate-600 group-hover:text-slate-900">
+              Outside USA
+            </span>
+          </label>
+        </div>
+      </div>
+
+      {/* 3. Core Requirements */}
+      <div className="space-y-3">
+        <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">
+          Work Style & Visa
+        </label>
+        <div className="mt-2 flex flex-col gap-3">
+          <label className="flex items-center gap-2 cursor-pointer group">
+            <input
+              type="checkbox"
+              className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              checked={searchParams.get("remote") === "true"}
+              onChange={(e) => updateFilters({ remote: e.target.checked })}
+            />
+            <span className="text-sm text-slate-600 group-hover:text-slate-900">
+              Remote
+            </span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer group">
+            <input
+              type="checkbox"
+              className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              checked={searchParams.get("visa") === "true"}
+              onChange={(e) => updateFilters({ visa: e.target.checked })}
+            />
+            <span className="text-sm text-slate-600 group-hover:text-slate-900">
+              Visa Sponsorship Supported
+            </span>
+          </label>
+        </div>
+      </div>
+
+      {/* 4. Experience Level */}
+      <div>
+        <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 block">
+          Level
+        </label>
+        <select
+          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+          value={currentLevel}
+          onChange={(e) => updateFilters({ level: e.target.value })}
+        >
+          <option value="">All Levels</option>
+          <option value="junior">Junior / Intern</option>
+          <option value="mid">Mid Level</option>
+          <option value="senior">Senior</option>
+          <option value="staff">Staff / Principal</option>
+        </select>
+      </div>
+
+      {/* 3. Company Stage (New) */}
+      <div>
+        <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 block">
+          Company Stage
+        </label>
+        <select
+          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+          value={searchParams.get("stage") || ""}
+          onChange={(e) => updateFilters({ stage: e.target.value })}
+        >
+          <option value="">All Stages</option>
+          <option value="early">Early (Seed / Series A)</option>
+          <option value="growth">Growth (Series B - D)</option>
+          <option value="mature">Mature (Public / Profitable)</option>
+        </select>
+      </div>
+
       {/* 2. Posted Date (Recency) */}
       <div>
         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 block">
@@ -71,53 +170,6 @@ export default function FilterBar() {
         </div>
       </div>
 
-      {/* 3. Core Requirements */}
-      <div className="space-y-3">
-        <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1 block">
-          Work Style & Visa
-        </label>
-        <label className="flex items-center gap-3 cursor-pointer group">
-          <input
-            type="checkbox"
-            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-            checked={searchParams.get("remote") === "true"}
-            onChange={(e) => updateFilters({ remote: e.target.checked })}
-          />
-          <span className="text-sm text-slate-600 group-hover:text-slate-900">
-            Remote
-          </span>
-        </label>
-        <label className="flex items-center gap-3 cursor-pointer group">
-          <input
-            type="checkbox"
-            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-            checked={searchParams.get("visa") === "true"}
-            onChange={(e) => updateFilters({ visa: e.target.checked })}
-          />
-          <span className="text-sm text-slate-600 group-hover:text-slate-900">
-            Visa Sponsorship Supported
-          </span>
-        </label>
-      </div>
-
-      {/* 4. Experience Level */}
-      <div>
-        <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 block">
-          Level
-        </label>
-        <select
-          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-          value={currentLevel}
-          onChange={(e) => updateFilters({ level: e.target.value })}
-        >
-          <option value="">All Levels</option>
-          <option value="junior">Junior / Intern</option>
-          <option value="mid">Mid Level</option>
-          <option value="senior">Senior</option>
-          <option value="staff">Staff / Principal</option>
-        </select>
-      </div>
-
       {/* 5. Salary Threshold */}
       <div>
         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 block">
@@ -140,15 +192,36 @@ export default function FilterBar() {
       </div>
 
       {/* 6. Clear All Filters */}
-      {searchParams.toString() !== "" &&
-        searchParams.toString() !== "page=1" && (
-          <button
-            onClick={() => router.push("/")}
-            className="w-full py-2 text-xs font-bold text-red-500 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-100 transition-all"
-          >
-            Clear All Filters
-          </button>
-        )}
+      <div
+        className={`w-full transition-all ${
+          searchParams.toString() !== "" && searchParams.toString() !== "page=1"
+            ? "visible opacity-100"
+            : "invisible opacity-0"
+        }`}
+      >
+        <button
+          onClick={() => router.push("/")}
+          className="w-full py-2 text-xs font-bold text-red-500 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-100 transition-all"
+        >
+          Clear All Filters
+        </button>
+      </div>
+
+      {/* 7. AD */}
+      <div className="mt-10 p-4 bg-blue-50 rounded-xl border border-blue-100">
+        <h3 className="text-sm font-semibold text-blue-900">About this tool</h3>
+        <p className="text-xs text-blue-700 mt-2 leading-relaxed">
+          I built this to make HN job hunting easier. Want to see more of my
+          work?
+        </p>
+        <a
+          href="https://www.anna4code.dev/projects"
+          target="_blank"
+          className="mt-3 inline-flex items-center text-xs font-bold text-blue-600 hover:text-blue-800"
+        >
+          Visit my Projects →
+        </a>
+      </div>
     </div>
   );
 }
