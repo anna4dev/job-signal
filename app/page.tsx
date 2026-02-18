@@ -3,6 +3,7 @@ import JobCard from "@/components/JobCard";
 import FilterBar from "@/components/FilterBar";
 import { JobWithCompany } from "@/types/job";
 import Pagination from "@/components/Pagination";
+import BookmarkEntry from "@/components/BookmarkEntry";
 
 type QueryParam = string | number | null;
 export const revalidate = 300;
@@ -17,13 +18,14 @@ export const metadata = {
     "Software Engineer Jobs",
     "Tech Jobs Search",
     "Remote Jobs",
+    "job signal",
   ],
   openGraph: {
     title: "Hacker News Who's Hiring - Structured Interface",
     description:
       "Stop scrolling long threads. Find your next tech job with our structured HN job board.",
     type: "website",
-    // images: ['/og-image.png'], // 建议以后做一个漂亮的预览图
+    // images: ['/og-image.png'], // preview logo
   },
 };
 
@@ -134,12 +136,16 @@ export default async function JobsPage({
         args: [...params, pageSize, offset],
       },
     ],
-    "read"
+    "read",
   );
 
   const total = Number(countRes.rows[0].total);
   const totalPages = Math.ceil(total / pageSize);
-  const jobs = jobsRes.rows as unknown as JobWithCompany[];
+  // const jobs = jobsRes.rows as unknown as JobWithCompany[];
+  const jobs = (jobsRes.rows as unknown as JobWithCompany[]).map((job) => ({
+    ...job,
+    post_at: new Date(job.post_at).toISOString().slice(0, 10),
+  }));
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
@@ -181,6 +187,7 @@ export default async function JobsPage({
             </div>
           )}
         </main>
+        <BookmarkEntry />
       </div>
       <footer className="mt-20 py-8 border-t border-gray-100">
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-gray-500">

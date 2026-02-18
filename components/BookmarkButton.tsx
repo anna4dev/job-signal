@@ -1,0 +1,57 @@
+"use client";
+
+import { useBookmarks } from "@/hooks/useBookmarks";
+
+export default function BookmarkButton({
+  jobId,
+  showText = true,
+  size = "md",
+}: {
+  jobId: string;
+  showText?: boolean;
+  size?: "sm" | "md";
+}) {
+  const { bookmarks, toggleBookmark } = useBookmarks();
+  const isBookmarked = bookmarks.some((item) => item.job_id === jobId);
+
+  const sizes = {
+    sm: {
+      icon: "w-5 h-5",
+      button: "p-1",
+    },
+    md: {
+      icon: "w-6 h-6",
+      button: "p-2",
+    },
+  };
+
+  return (
+    <button
+      onClick={() => toggleBookmark(jobId)}
+      className={`flex items-center cursor-pointer transition-all duration-200 rounded-full hover:bg-slate-50 ${
+        sizes[size].button
+      } ${
+        isBookmarked ? "text-blue-600" : "text-slate-400 hover:text-blue-600"
+      }`}
+      title={isBookmarked ? "Remove from bookmarks" : "Save for later"}
+    >
+      <svg
+        className={`${sizes[size].icon} ${isBookmarked ? "fill-current" : "fill-none"}`}
+        stroke="currentColor"
+        strokeWidth="2"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+        />
+      </svg>
+      {showText && (
+        <span className="text-sm font-semibold ml-1">
+          {isBookmarked ? "Saved" : "Save"}
+        </span>
+      )}
+    </button>
+  );
+}

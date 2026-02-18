@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { Metadata } from "next";
 import Link from "next/link";
 import { JobFullDetail, RiskFlag, RecentNews } from "@/types/job";
+import JobDetailNav from "@/components/JobDetailNav";
+import BookmarkEntry from "@/components/BookmarkEntry";
 export const revalidate = 300;
 
 export async function generateMetadata({
@@ -62,7 +64,7 @@ export default async function JobDetailPage({
   const recentNews = parseJSON<RecentNews[]>(job.recent_news, []);
   const sourceLinks = parseJSON<{ website?: string; linkedin?: string }>(
     job.source_links,
-    {}
+    {},
   );
 
   const displayLocation = () => {
@@ -119,74 +121,36 @@ export default async function JobDetailPage({
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
       {/* Top Navigation */}
-      <nav className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link
-            href="/"
-            className="text-sm font-medium text-slate-600 hover:text-blue-600 flex items-center gap-1"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-            Back to List
-          </Link>
-          <div className="flex gap-3">
-            {sourceLinks.website && (
-              <a
-                href={sourceLinks.website}
-                target="_blank"
-                className="text-sm px-4 py-2 border rounded-lg hover:bg-slate-50 transition-colors"
-              >
-                Website
-              </a>
-            )}
-            {!!job.jd_url && (
-              <a
-                href={job.jd_url || "#"}
-                target="_blank"
-                className="text-sm px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-              >
-                Apply Now
-              </a>
-            )}
-          </div>
-        </div>
-      </nav>
+      <JobDetailNav
+        jobId={job.job_id}
+        website={sourceLinks.website}
+        jdUrl={job.jd_url || undefined}
+      />
 
       <main className="max-w-5xl mx-auto px-4 mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column: Main Content */}
         <div className="lg:col-span-2 space-y-8">
           {/* Core Info */}
           <section className="bg-white rounded-2xl border border-slate-200 p-8">
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <h1 className="text-3xl font-bold text-slate-900 mb-2">
-                  {job.role_title}
-                </h1>
+            <div className="mb-6">
+              <h1 className="text-3xl font-bold text-slate-900 mb-2">
+                {job.role_title}
+              </h1>
+              <div className="flex items-center justify-between">
                 <p className="text-lg text-slate-600">
                   {job.company_name} · {job.industry}
                 </p>
-              </div>
-              <div className="text-right flex gap-2">
-                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-wider">
-                  {job.level}
-                </span>
-
-                {job.location_remote === 1 && (
+                <div className="text-right flex gap-2">
                   <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-wider">
-                    {`${"Remote" + (job.location_timezone || "")}`}
+                    {job.level}
                   </span>
-                )}
+
+                  {job.location_remote === 1 && (
+                    <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-wider">
+                      {`Remote${job.location_timezone ? ` (${job.location_timezone})` : ""}`}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -198,7 +162,7 @@ export default async function JobDetailPage({
                 <p className="font-semibold text-slate-900">
                   {job.salary_min
                     ? `$${Math.round(job.salary_min / 1000)}k - $${Math.round(
-                        job.salary_max! / 1000
+                        job.salary_max! / 1000,
                       )}k`
                     : "Negotiable"}
                 </p>
@@ -386,6 +350,7 @@ export default async function JobDetailPage({
             </p>
           </div>
         </div>
+        <BookmarkEntry />
       </main>
       {/* 3. 将脚本注入页面 */}
       <script

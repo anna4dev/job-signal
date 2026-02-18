@@ -8,7 +8,7 @@ export default function FilterBar() {
 
   // Helper method to update URL parameters
   const updateFilters = (
-    updates: Record<string, string | boolean | undefined>
+    updates: Record<string, string | boolean | undefined>,
   ) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("page", "1");
@@ -29,7 +29,7 @@ export default function FilterBar() {
   const currentLevel = searchParams.get("level") || "";
 
   return (
-    <div className="space-y-8 sticky top-24">
+    <div className="space-y-8 sticky top-4">
       {/* 1. Keyword Search */}
       <div>
         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 block">
