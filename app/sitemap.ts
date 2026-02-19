@@ -1,16 +1,25 @@
 import { MetadataRoute } from "next";
 import { db } from "@/lib/db";
 
+export const revalidate = 3600; // cache
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const result = await db.execute("SELECT job_id FROM jobs_structured");
+  const baseUrl = "https://job-signal.vercel.app";
+  const result = await db.execute(
+    "SELECT job_id FROM jobs_structured ORDER BY post_at DESC LIMIT 500",
+  );
 
   const jobEntries = result.rows.map((row) => ({
-    url: `https://job-signal.vercel.app/jobs/${row.job_id}`,
+    url: `${baseUrl}/jobs/${row.job_id}`,
     lastModified: new Date(),
   }));
 
   return [
-    { url: "https://job-signal.vercel.app/", lastModified: new Date() },
+    { url: baseUrl, lastModified: new Date() },
+    {
+      url: `${baseUrl}/bookmarks`,
+      lastModified: new Date(),
+    },
     ...jobEntries,
   ];
 }
