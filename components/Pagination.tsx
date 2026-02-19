@@ -29,7 +29,7 @@ export default function Pagination({
 
   return (
     <div className="mt-12 flex items-center justify-center gap-2">
-      {/* 上一页 */}
+      {/* prev */}
       <button
         onClick={() => navToPage(currentPage - 1)}
         disabled={currentPage <= 1}
@@ -50,11 +50,10 @@ export default function Pagination({
         </svg>
       </button>
 
-      {/* 页码显示 */}
+      {/* page nums */}
       <div className="flex items-center gap-1">
         {[...Array(totalPages)].map((_, i) => {
           const page = i + 1;
-          // 简单的分页逻辑：只显示当前页附近的页码
           if (
             page === 1 ||
             page === totalPages ||
@@ -84,7 +83,7 @@ export default function Pagination({
         })}
       </div>
 
-      {/* 下一页 */}
+      {/* next */}
       <button
         onClick={() => navToPage(currentPage + 1)}
         disabled={currentPage >= totalPages}
