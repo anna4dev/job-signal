@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 export const revalidate = 3600; // cache
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = "https://job-signal.vercel.app";
+  const baseUrl = "https://jobsignal.dev";
   const result = await db.execute(
     "SELECT job_id FROM jobs_structured ORDER BY post_at DESC LIMIT 500",
   );

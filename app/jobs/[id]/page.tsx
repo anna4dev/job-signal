@@ -84,17 +84,17 @@ export default async function JobDetailPage({
     return parts.length > 0 ? parts.join(", ") : "Location N/A";
   };
 
-  // 2. 准备 JSON-LD 数据对象
+  // 2. prepare JSON-LD
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "JobPosting",
     title: job.role_title,
-    description: job.level, // 确保这是纯文本或符合规范的 HTML
+    description: job.level,
     datePosted: new Date(job.post_at as string).toISOString(),
     hiringOrganization: {
       "@type": "Organization",
       name: job.company_name,
-      sameAs: sourceLinks.website, // 如果你有公司官网链接
+      sameAs: sourceLinks.website, // company website
     },
     jobLocation: {
       "@type": "Place",
@@ -103,7 +103,6 @@ export default async function JobDetailPage({
         addressLocality: displayLocation(),
       },
     },
-    // 如果有薪资数据
     baseSalary: job.salary_min
       ? {
           "@type": "MonetaryAmount",

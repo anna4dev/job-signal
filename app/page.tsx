@@ -18,7 +18,7 @@ export const metadata = {
     "Software Engineer Jobs",
     "Tech Jobs Search",
     "Remote Jobs",
-    "job signal",
+    "Job Signal",
   ],
   openGraph: {
     title: "Hacker News Who's Hiring - Structured Interface",
