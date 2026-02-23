@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import StackFilter from "./StackFilter";
 
 export default function FilterBar() {
   const router = useRouter();
@@ -45,6 +46,8 @@ export default function FilterBar() {
           />
         </div>
       </div>
+
+      <StackFilter />
 
       {/* 2. Location Scope (New) */}
       <div className="space-y-3">
@@ -126,48 +129,31 @@ export default function FilterBar() {
         </select>
       </div>
 
-      {/* 3. Company Stage (New) */}
-      <div>
-        <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 block">
-          Company Stage
-        </label>
-        <select
-          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-          value={searchParams.get("stage") || ""}
-          onChange={(e) => updateFilters({ stage: e.target.value })}
-        >
-          <option value="">All Stages</option>
-          <option value="early">Early (Seed / Series A)</option>
-          <option value="growth">Growth (Series B - D)</option>
-          <option value="mature">Mature (Public / Profitable)</option>
-        </select>
-      </div>
-
       {/* 2. Posted Date (Recency) */}
       <div>
         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 block">
           Date Posted
         </label>
-        <div className="flex flex-wrap gap-2">
+        <select
+          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+          value={currentDays}
+          onChange={(e) => updateFilters({ days: e.target.value })}
+        >
           {[
             { label: "All Time", value: "" },
             { label: "Past 3 Days", value: "3" },
             { label: "Past 7 Days", value: "7" },
             { label: "This Month", value: "30" },
           ].map((item) => (
-            <button
+            <option
               key={item.value}
+              value={item.value}
               onClick={() => updateFilters({ days: item.value })}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                currentDays === item.value
-                  ? "bg-blue-600 border-blue-600 text-white shadow-sm"
-                  : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
-              }`}
             >
               {item.label}
-            </button>
+            </option>
           ))}
-        </div>
+        </select>
       </div>
 
       {/* 5. Salary Threshold */}
@@ -215,7 +201,7 @@ export default function FilterBar() {
           work?
         </p>
         <a
-          href="https://www.anna4code.dev/projects"
+          href="https://anna4code.dev/projects"
           target="_blank"
           className="mt-3 inline-flex items-center text-xs font-bold text-blue-600 hover:text-blue-800"
         >

@@ -4,6 +4,7 @@ import FilterBar from "@/components/FilterBar";
 import { JobWithCompany } from "@/types/job";
 import Pagination from "@/components/Pagination";
 import BookmarkEntry from "@/components/BookmarkEntry";
+import Footer from "@/components/Footer";
 
 type QueryParam = string | number | null;
 export const revalidate = 300;
@@ -50,11 +51,23 @@ export default async function JobsPage({
 
   const isUSA = sParams.usa === "true";
   const isIntl = sParams.intl === "true";
-  const stage = sParams.stage || ""; // 'early' | 'growth' | 'mature'
+  // const stage = sParams.stage || ""; // 'early' | 'growth' | 'mature'
+  const selectedStacks = sParams.stack
+    ? sParams.stack.split(",").filter(Boolean)
+    : [];
 
   // 2. Build base filter conditions
   let whereClause = `WHERE (j.role_title LIKE ? OR c.company_name LIKE ?)`;
   const params: QueryParam[] = [`%${searchQuery}%`, `%${searchQuery}%`];
+
+  if (selectedStacks.length > 0) {
+    selectedStacks.forEach((stack: string) => {
+      whereClause += ` AND EXISTS (
+      SELECT 1 FROM json_each(c.tech_stack) WHERE value = ?
+    )`;
+      params.push(stack);
+    });
+  }
 
   if (isRemote) {
     whereClause += ` AND j.location_remote = ?`;
@@ -83,45 +96,13 @@ export default async function JobsPage({
     params.push(minSalary);
   }
 
-  // 3. 新增：地区筛选 (基于 location_country)
+  // Filter by location_country
   if (isUSA && !isIntl) {
     whereClause += ` AND j.location_country = ?`;
     params.push("USA");
   } else if (isIntl && !isUSA) {
     whereClause += ` AND j.location_country != ? AND j.location_country IS NOT NULL`;
     params.push("USA");
-  }
-
-  // 4. 新增：公司阶段筛选 (基于 funding_stage)
-  if (stage === "early") {
-    whereClause += ` AND (
-    c.funding_stage LIKE '%Seed%' OR 
-    c.funding_stage LIKE '%Series A%' OR 
-    c.funding_stage LIKE '%YC %' OR 
-    c.funding_stage LIKE '%Early%' OR 
-    c.funding_stage LIKE '%Bootstrapped%' OR
-    c.funding_stage LIKE '%Pre-series A%' OR
-    c.funding_stage LIKE '%$10M%'
-  )`;
-  } else if (stage === "growth") {
-    whereClause += ` AND (
-    c.funding_stage LIKE '%Series B%' OR 
-    c.funding_stage LIKE '%Series C%' OR 
-    c.funding_stage LIKE '%Series D%' OR 
-    c.funding_stage LIKE '%Growth%' OR 
-    c.funding_stage LIKE '%Unicorn%' OR 
-    c.funding_stage LIKE '%Well-funded%' OR
-    c.funding_stage LIKE '%$50M%'
-  )`;
-  } else if (stage === "mature") {
-    whereClause += ` AND (
-    c.funding_stage LIKE '%Profitable%' OR 
-    c.funding_stage LIKE '%Acquired%' OR 
-    c.funding_stage LIKE '%Pre-IPO%' OR 
-    c.funding_stage LIKE '%Established%' OR
-    c.funding_stage LIKE '%Private%' OR
-    c.funding_stage LIKE '%cashflow positive%'
-  )`;
   }
 
   // 3. Get total count for pagination calculation
@@ -180,7 +161,7 @@ export default async function JobsPage({
           )}
 
           {jobs.length === 0 && (
-            <div className="text-center py-20 bg-gray-50 rounded-lg border-2 border-dashed">
+            <div className="text-center py-20 bg-gray-50 rounded-lg border-2 border-gray-400 border-dashed">
               <p className="text-gray-400">
                 No matching jobs found. Try adjusting your filters.
               </p>
@@ -189,21 +170,7 @@ export default async function JobsPage({
         </main>
         <BookmarkEntry />
       </div>
-      <footer className="mt-20 py-8 border-t border-gray-100">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-gray-500">
-          <p>© {new Date().getFullYear()} Job Signal</p>
-          <p>
-            Built with ❤️ by{" "}
-            <a
-              href="https://www.anna4code.dev/"
-              target="_blank"
-              className="font-medium text-blue-600 hover:underline transition-colors"
-            >
-              Anna4code
-            </a>
-          </p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

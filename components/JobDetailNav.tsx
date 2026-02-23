@@ -19,7 +19,7 @@ interface JobNavProps {
 export default function JobDetailNav({ jobId, website, jdUrl }: JobNavProps) {
   return (
     <nav className="bg-white border-b border-slate-200 sticky top-0 z-10">
-      <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
         <Link
           href="/"
           className="text-sm font-medium text-slate-600 hover:text-blue-600 flex items-center gap-1"

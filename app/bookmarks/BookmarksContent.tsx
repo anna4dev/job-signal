@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import JobCard from "@/components/JobCard";
 import { JobWithBookmark } from "@/types/job";
 import Pagination from "@/components/Pagination";
+import Footer from "@/components/Footer";
 
 export default function BookmarksContent() {
   const { bookmarks } = useBookmarks();
@@ -62,7 +63,7 @@ export default function BookmarksContent() {
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-200 py-4 sticky top-0 z-20">
-        <div className="max-w-4xl mx-auto px-4 flex justify-between items-center">
+        <div className="max-w-6xl mx-auto px-4 flex justify-between items-center">
           <button
             onClick={() => router.back()}
             className="text-sm font-medium text-slate-600 hover:text-blue-600 flex items-center gap-1"
@@ -91,7 +92,7 @@ export default function BookmarksContent() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main className="max-w-6xl mx-auto px-4 py-8">
         {loading ? (
           <div className="animate-pulse space-y-4">
             {[1, 2, 3].map((i) => (
@@ -114,6 +115,7 @@ export default function BookmarksContent() {
         {totalPages > 1 && (
           <Pagination currentPage={currentPage} totalPages={totalPages} />
         )}
+        <Footer />
       </main>
     </div>
   );

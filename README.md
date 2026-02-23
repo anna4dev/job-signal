@@ -130,7 +130,7 @@ Future updates will follow this priority order:
 
 _Goal: Bridge the gap between job data and user intent._
 
-- [ ] **1.1 Enhance Filter**
+- [x] **1.1 Enhance Filter**
 - Add `stack` filter.
 
 - [ ] **1.2 Implicit Signals**
@@ -165,6 +165,11 @@ _Goal: Quantify "Fit" and eliminate the "Black Box" feeling._
 - Add status field to bookmark model and toggle in UI (e.g., Saved/Applied/Interviewing/Offer/Rejected)
 - Add status grouping in bookmarks page
 - Use job lifecycle as implicit matching signal
+
+- [] **2.5 Company Intelligence Layer**
+- Add `/company/[company_id]` page
+- Show company info, aggregated jobs
+- bookmark
 
 #### Phase 3: The Identity & Sync Layer
 
