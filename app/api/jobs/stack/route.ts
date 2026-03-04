@@ -8,17 +8,17 @@ const getCachedStackStats = unstable_cache(
     // query stack fron json
     const query = `
       SELECT 
-        j.value as name, 
-        COUNT(*) as count
+          j.value AS name, 
+          COUNT(*) AS count
       FROM 
-        company_structured, 
-        json_each(company_structured.tech_stack) as j
+          jobs_structured, 
+          json_each(jobs_structured.tech_stack) AS j
       WHERE 
-        company_structured.tech_stack IS NOT NULL
+          jobs_structured.tech_stack IS NOT NULL
       GROUP BY 
-        j.value
+          j.value
       ORDER BY 
-        count DESC;
+          count DESC;
     `;
 
     const response = await db.execute(query);
