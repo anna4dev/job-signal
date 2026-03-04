@@ -68,6 +68,8 @@ export default function StackFilter() {
 
   const filteredOptions = options.filter(
     (opt) =>
+      opt &&
+      opt.name &&
       opt.name.toLowerCase().includes(query.toLowerCase()) &&
       !selectedStacks.includes(opt.name),
   );

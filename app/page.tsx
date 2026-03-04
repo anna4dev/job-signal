@@ -63,7 +63,7 @@ export default async function JobsPage({
   if (selectedStacks.length > 0) {
     selectedStacks.forEach((stack: string) => {
       whereClause += ` AND EXISTS (
-      SELECT 1 FROM json_each(c.tech_stack) WHERE value = ?
+      SELECT 1 FROM json_each(j.tech_stack) WHERE value = ?
     )`;
       params.push(stack);
     });
@@ -113,7 +113,7 @@ export default async function JobsPage({
         args: params,
       },
       {
-        sql: `SELECT j.*, c.company_name, c.tech_stack FROM jobs_structured j JOIN company_structured c ON j.company_id = c.company_id ${whereClause} ORDER BY j.post_at DESC LIMIT ? OFFSET ?`,
+        sql: `SELECT j.*, c.company_name FROM jobs_structured j JOIN company_structured c ON j.company_id = c.company_id ${whereClause} ORDER BY j.post_at DESC LIMIT ? OFFSET ?`,
         args: [...params, pageSize, offset],
       },
     ],
