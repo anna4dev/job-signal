@@ -128,14 +128,15 @@ export default function JobCard({ job }: JobCardProps) {
       </div>
 
       <div className="mt-4 flex flex-wrap gap-1.5">
-        {techStack.slice(0, 6).map((tech) => (
-          <span
-            key={tech}
-            className="px-2 py-0.5 text-xs font-medium text-slate-600 bg-slate-100 rounded-md border border-transparent group-hover:border-slate-200 transition-colors"
-          >
-            {tech}
-          </span>
-        ))}
+        {techStack &&
+          techStack.slice(0, 6).map((tech) => (
+            <span
+              key={tech}
+              className="px-2 py-0.5 text-xs font-medium text-slate-600 bg-slate-100 rounded-md border border-transparent group-hover:border-slate-200 transition-colors"
+            >
+              {tech}
+            </span>
+          ))}
       </div>
 
       <div className="mt-5 pt-4 border-t border-slate-50 flex items-center justify-between">
