@@ -52,7 +52,12 @@ export default async function JobDetailPage({
   // 2. Helper function to parse JSON fields
   const parseJSON = <T,>(json: string | null, fallback: T): T => {
     try {
-      return json ? JSON.parse(json) : fallback;
+      if (!json || json === "null") {
+        // fix string null
+        return fallback;
+      }
+      const result = JSON.parse(json);
+      return result ?? fallback;
     } catch {
       return fallback;
     }
