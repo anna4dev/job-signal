@@ -69,5 +69,10 @@ export function useBookmarks() {
     window.dispatchEvent(new Event("bookmark-change"));
   };
 
-  return { bookmarks, toggleBookmark };
+  const clearAll = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    window.dispatchEvent(new Event("bookmark-change"));
+  };
+
+  return { bookmarks, toggleBookmark, clearAll };
 }
