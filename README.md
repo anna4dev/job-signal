@@ -171,7 +171,7 @@ _Goal: Quantify "Fit" and eliminate the "Black Box" feeling._
 - Add status grouping in bookmarks page
 - Use job lifecycle as implicit matching signal
 
-- [] **2.5 Company Intelligence Layer**
+- [ ] **2.5 Company Intelligence Layer**
 - Add `/company/[company_id]` page
 - Show company info, aggregated jobs
 - bookmark
