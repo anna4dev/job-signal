@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import StackFilter from "./StackFilter";
+import { useState } from "react";
 
 export default function FilterBar() {
   const router = useRouter();
@@ -12,7 +13,6 @@ export default function FilterBar() {
     updates: Record<string, string | boolean | undefined>,
   ) => {
     const params = new URLSearchParams(searchParams.toString());
-    params.set("page", "1");
 
     Object.entries(updates).forEach(([key, value]) => {
       if (value === undefined || value === false || value === "") {
@@ -29,6 +29,8 @@ export default function FilterBar() {
   const currentDays = searchParams.get("days") || "";
   const currentLevel = searchParams.get("level") || "";
 
+  const [inputValue, setInputValue] = useState(searchParams.get("q") || "");
+
   return (
     <div className="space-y-8 sticky top-4">
       {/* 1. Keyword Search */}
@@ -41,8 +43,13 @@ export default function FilterBar() {
             type="text"
             placeholder="e.g. Rust, Frontend"
             className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-            onChange={(e) => updateFilters({ q: e.target.value })}
-            defaultValue={searchParams.get("q") || ""}
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                updateFilters({ q: inputValue || undefined });
+              }
+            }}
           />
         </div>
       </div>
@@ -186,7 +193,10 @@ export default function FilterBar() {
         }`}
       >
         <button
-          onClick={() => router.push("/")}
+          onClick={() => {
+            setInputValue("");
+            router.push("/");
+          }}
           className="w-full py-2 text-xs font-bold text-red-500 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-100 transition-all"
         >
           Clear All Filters
