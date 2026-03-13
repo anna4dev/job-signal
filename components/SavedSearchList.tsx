@@ -13,9 +13,7 @@ export default function SavedSearchList({ onApply }: SavedSearchListProps) {
 
   const handleApply = (filters: Record<string, string>) => {
     const params = new URLSearchParams(filters);
-    // 1. 更新 URL
     router.push(`/?${params.toString()}`);
-    // 2. 告诉父组件切换回筛选视图
     onApply();
   };
 

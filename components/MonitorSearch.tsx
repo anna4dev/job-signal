@@ -4,9 +4,7 @@ import {
   getNormalizedSnapshot,
   useSavedSearches,
 } from "@/hooks/useSavedSearches";
-import { SavedSearchItem } from "@/types/search";
 import { useSearchParams } from "next/navigation";
-import router from "next/router";
 import { useState, useMemo, useRef, useEffect } from "react";
 
 export default function MonitorSearch() {
@@ -75,8 +73,6 @@ export default function MonitorSearch() {
     delete filters.page;
     saveSearch(name, filters);
     setIsSaving(false);
-    // 视觉反馈：关闭输入框
-    setIsSaving(false);
   };
 
   if (
@@ -109,7 +105,6 @@ export default function MonitorSearch() {
         </button>
       </div>
 
-      {/* 只有在非展示态才展开输入框 */}
       {!existingSearch && isSaving && (
         <div className="mt-3 pt-2 border-t border-slate-200/50 animate-in slide-in-from-top-1">
           <input
