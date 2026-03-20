@@ -8,9 +8,18 @@ interface StackOption {
   count: number;
 }
 
-export default function StackFilter() {
+export default function StackFilter({
+  value,
+  onChange,
+}: {
+  value?: string[];
+  onChange?: (next: string[]) => void;
+} = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isControlled =
+    Array.isArray(value) && typeof onChange === "function";
+
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<StackOption[]>([]);
@@ -26,18 +35,19 @@ export default function StackFilter() {
   }, []);
 
   const selectedStacks = useMemo(() => {
+    if (isControlled) return value || [];
     return searchParams.get("stack")?.split(",").filter(Boolean) || [];
-  }, [searchParams]);
+  }, [isControlled, searchParams, value]);
 
   const updateFilters = (newStacks: string[]) => {
-    const params = new URLSearchParams(searchParams.toString());
-
-    if (newStacks.length > 0) {
-      params.set("stack", newStacks.join(","));
-    } else {
-      params.delete("stack");
+    if (isControlled) {
+      onChange?.(newStacks);
+      return;
     }
 
+    const params = new URLSearchParams(searchParams.toString());
+    if (newStacks.length > 0) params.set("stack", newStacks.join(","));
+    else params.delete("stack");
     params.delete("page");
     router.push(`?${params.toString()}`, { scroll: false });
   };

@@ -1,11 +1,14 @@
 import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
-import Link from "next/link";
-import { JobFullDetail, RiskFlag, RecentNews } from "@/types/job";
+import { JobFullDetail, RiskFlag, RecentNews, RawPostData } from "@/types/job";
 import JobDetailNav from "@/components/JobDetailNav";
 import BookmarkEntry from "@/components/BookmarkEntry";
 import Footer from "@/components/Footer";
+import JobSalaryCard from "@/components/JobOverrides/JobSalaryCard";
+import JobVisaSupportCard from "@/components/JobOverrides/JobVisaSupportCard";
+import JobTechStackTags from "@/components/JobOverrides/JobTechStackTags";
+import JobRawPostSection from "@/components/JobOverrides/JobRawPostSection";
 export const revalidate = 300;
 
 export async function generateMetadata({
@@ -14,7 +17,7 @@ export async function generateMetadata({
   params: { id: string };
 }): Promise<Metadata> {
   const id = (await params).id;
-  // 从 Turso 查询职位详情
+  // get detail
   const result = await db.execute({
     sql: "SELECT j.role_title, c.company_name FROM jobs_structured j JOIN company_structured c ON c.company_id = j.company_id WHERE job_id =  ?",
     args: [id],
@@ -34,11 +37,13 @@ export default async function JobDetailPage({
 }) {
   // 1. Data Fetching
   const { id } = await params;
-  console.log("Current request ID:", id);
   const result = await db.execute({
     sql: `
-    SELECT j.*, c.* FROM jobs_structured j
+    SELECT j.*, c.*,
+      r.raw_text
+    FROM jobs_structured j
     JOIN company_structured c ON j.company_id = c.company_id
+    JOIN jobs_raw r ON r.id = j.job_raw_id
     WHERE j.job_id = ?
   `,
     args: [id],
@@ -48,6 +53,15 @@ export default async function JobDetailPage({
     console.log(`Job with ID ${id} not found`);
     notFound();
   }
+
+  const rawPostData: RawPostData = {
+    job_id: String(job.job_id),
+    job_raw_id: String(job.job_raw_id),
+    salary_min: job.salary_min ?? null,
+    salary_max: job.salary_max ?? null,
+    location_visa_supported: job.location_visa_supported ?? null,
+    raw_text: job.raw_text,
+  };
 
   // 2. Helper function to parse JSON fields
   const parseJSON = <T,>(json: string | null, fallback: T): T => {
@@ -68,6 +82,7 @@ export default async function JobDetailPage({
   const riskFlags = parseJSON<RiskFlag[]>(job.risk_flags, []);
   const engineeringSignals = parseJSON<string[]>(job.engineering_signals, []);
   const recentNews = parseJSON<RecentNews[]>(job.recent_news, []);
+  const baseTechStack = parseJSON<string[]>(job.tech_stack, []);
   const sourceLinks = parseJSON<{ website?: string; linkedin?: string }>(
     job.source_links,
     {},
@@ -161,32 +176,26 @@ export default async function JobDetailPage({
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 py-6 border-y border-slate-100">
-                <div>
-                  <p className="text-xs text-slate-400 mb-1">
-                    Salary Range (USD)
-                  </p>
-                  <p className="font-semibold text-slate-900">
-                    {job.salary_min
-                      ? `$${Math.round(job.salary_min / 1000)}k - $${Math.round(
-                          job.salary_max! / 1000,
-                        )}k`
-                      : "Negotiable"}
-                  </p>
-                </div>
+                <JobSalaryCard
+                  jobId={job.job_id}
+                  baseSalaryMin={job.salary_min}
+                  baseSalaryMax={job.salary_max}
+                  baseVisaSupported={job.location_visa_supported}
+                  baseTechStack={baseTechStack}
+                />
                 <div>
                   <p className="text-xs text-slate-400 mb-1">Location</p>
                   <p className="font-semibold text-slate-900">
                     {displayLocation()}
                   </p>
                 </div>
-                <div>
-                  <p className="text-xs text-slate-400 mb-1">Visa Support</p>
-                  <p className="font-semibold text-slate-900">
-                    {job.location_visa_supported
-                      ? "Supported"
-                      : "Not Supported"}
-                  </p>
-                </div>
+                <JobVisaSupportCard
+                  jobId={job.job_id}
+                  baseVisaSupported={job.location_visa_supported}
+                  baseSalaryMin={job.salary_min}
+                  baseSalaryMax={job.salary_max}
+                  baseTechStack={baseTechStack}
+                />
                 <div>
                   <p className="text-xs text-slate-400 mb-1">Funding Stage</p>
                   <p className="font-semibold text-slate-900">
@@ -237,14 +246,10 @@ export default async function JobDetailPage({
                 Engineering Culture & Tech Stack
               </h2>
               <div className="flex flex-wrap gap-2 mb-8">
-                {parseJSON<string[]>(job.tech_stack, []).map((tech) => (
-                  <span
-                    key={tech}
-                    className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium"
-                  >
-                    {tech}
-                  </span>
-                ))}
+                <JobTechStackTags
+                  jobId={job.job_id}
+                  baseTechStack={baseTechStack}
+                />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {engineeringSignals.map((signal, i) => (
@@ -270,6 +275,12 @@ export default async function JobDetailPage({
                 ))}
               </div>
             </section>
+
+            {/* Raw Post (HN reference) */}
+            <JobRawPostSection
+              jobData={rawPostData}
+              baseTechStack={baseTechStack}
+            />
           </div>
 
           {/* Right Sidebar */}
