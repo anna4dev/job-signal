@@ -5,6 +5,7 @@ import { JobWithCompany } from "@/types/job";
 import Pagination from "@/components/Pagination";
 import BookmarkEntry from "@/components/BookmarkEntry";
 import Footer from "@/components/Footer";
+import { unstable_cache } from "next/cache";
 
 type QueryParam = string | number | null;
 export const revalidate = 300;
@@ -30,6 +31,125 @@ export const metadata = {
   },
 };
 
+type JobSearchFilters = {
+  searchQuery: string;
+  selectedStacks: string[];
+  isRemote: boolean;
+  hasVisa: boolean;
+  days: number | null;
+  level: string | null;
+  minSalary: number;
+  isUSA: boolean;
+  isIntl: boolean;
+};
+
+const normalizeStacks = (stacks: string[]) =>
+  Array.from(new Set(stacks.map((s) => s.trim()).filter(Boolean))).sort();
+
+const getJobsPage = unstable_cache(
+  async (
+    _cacheKey: string,
+    filters: JobSearchFilters,
+    currentPage: number,
+    pageSize: number,
+  ): Promise<{ total: number; jobs: JobWithCompany[] }> => {
+    const offset = (currentPage - 1) * pageSize;
+
+    const selectedStacks = normalizeStacks(filters.selectedStacks);
+    const params: QueryParam[] = [];
+    const whereParts: string[] = [];
+
+    const hasTextQuery = filters.searchQuery.length > 0;
+    if (hasTextQuery) {
+      whereParts.push("(j.role_title LIKE ? OR c.company_name LIKE ?)");
+      params.push(`%${filters.searchQuery}%`, `%${filters.searchQuery}%`);
+    } else {
+      whereParts.push("1 = 1");
+    }
+
+    // Job must contain ALL selected stacks.
+    if (selectedStacks.length > 0) {
+      const stackPlaceholders = selectedStacks.map(() => "?").join(",");
+      whereParts.push(`(
+        SELECT COUNT(DISTINCT value)
+        FROM json_each(j.tech_stack)
+        WHERE value IN (${stackPlaceholders})
+      ) = ?`);
+      params.push(...selectedStacks, selectedStacks.length);
+    }
+
+    if (filters.isRemote) {
+      whereParts.push("j.location_remote = ?");
+      params.push(1);
+    }
+
+    if (filters.hasVisa) {
+      whereParts.push("j.location_visa_supported = ?");
+      params.push(1);
+    }
+
+    if (filters.days) {
+      whereParts.push("j.post_at >= date('now', ?)");
+      params.push(`-${filters.days} days`);
+    }
+
+    if (filters.level) {
+      whereParts.push("j.level = ?");
+      params.push(filters.level);
+    }
+
+    if (filters.minSalary > 0) {
+      whereParts.push("j.salary_max >= ?");
+      params.push(filters.minSalary);
+    }
+
+    if (filters.isUSA && !filters.isIntl) {
+      whereParts.push("j.location_country = ?");
+      params.push("USA");
+    } else if (filters.isIntl && !filters.isUSA) {
+      whereParts.push(
+        "j.location_country != ? AND j.location_country IS NOT NULL",
+      );
+      params.push("USA");
+    }
+
+    const whereClause = `WHERE ${whereParts.join(" AND ")}`;
+
+    // COUNT query can skip company join when there is no text query.
+    const countFrom = hasTextQuery
+      ? `FROM jobs_structured j JOIN company_structured c ON j.company_id = c.company_id`
+      : `FROM jobs_structured j`;
+    const countSql = `SELECT COUNT(*) as total ${countFrom} ${whereClause}`;
+
+    const listSql = `
+      SELECT j.*, c.company_name
+      FROM jobs_structured j
+      JOIN company_structured c ON j.company_id = c.company_id
+      ${whereClause}
+      ORDER BY j.post_at DESC
+      LIMIT ? OFFSET ?
+    `;
+
+    const [countRes, jobsRes] = await db.batch(
+      [
+        { sql: countSql, args: params },
+        { sql: listSql, args: [...params, pageSize, offset] },
+      ],
+      "read",
+    );
+
+    const total = Number(countRes.rows[0]?.total || 0);
+    const jobs = (jobsRes.rows as unknown as JobWithCompany[]).map((job) => ({
+      ...job,
+      post_at: new Date(job.post_at).toISOString().slice(0, 10),
+    }));
+
+    return { total, jobs };
+  },
+  ["jobs-page-v2"],
+  { revalidate: 60, tags: ["jobs-page-tag-v2"] },
+);
+
 export default async function JobsPage({
   searchParams,
 }: {
@@ -39,9 +159,8 @@ export default async function JobsPage({
   const sParams = await searchParams;
   const currentPage = Number(sParams.page) || 1;
   const pageSize = 10;
-  const offset = (currentPage - 1) * pageSize;
 
-  const searchQuery = sParams.q || "";
+  const searchQuery = (sParams.q || "").trim();
   const isRemote = sParams.remote === "true";
   const hasVisa = sParams.visa === "true";
 
@@ -53,80 +172,40 @@ export default async function JobsPage({
   const isIntl = sParams.intl === "true";
   // const stage = sParams.stage || ""; // 'early' | 'growth' | 'mature'
   const selectedStacks = sParams.stack
-    ? sParams.stack.split(",").filter(Boolean)
+    ? normalizeStacks(sParams.stack.split(","))
     : [];
 
-  // 2. Build base filter conditions
-  let whereClause = `WHERE (j.role_title LIKE ? OR c.company_name LIKE ?)`;
-  const params: QueryParam[] = [`%${searchQuery}%`, `%${searchQuery}%`];
+  // Make cache keys stable and explicit to avoid mismatches.
+  const filtersKey = JSON.stringify({
+    searchQuery,
+    selectedStacks,
+    isRemote,
+    hasVisa,
+    days,
+    level,
+    minSalary,
+    isUSA,
+    isIntl,
+  });
 
-  if (selectedStacks.length > 0) {
-    selectedStacks.forEach((stack: string) => {
-      whereClause += ` AND EXISTS (
-      SELECT 1 FROM json_each(j.tech_stack) WHERE value = ?
-    )`;
-      params.push(stack);
-    });
-  }
-
-  if (isRemote) {
-    whereClause += ` AND j.location_remote = ?`;
-    params.push(1);
-  }
-  if (hasVisa) {
-    whereClause += ` AND j.location_visa_supported = ?`;
-    params.push(1);
-  }
-  // Filter by time (SQLite using date function)
-  if (days) {
-    whereClause += ` AND j.post_at >= date('now', ?)`;
-    params.push(`-${days} days`);
-  }
-
-  // Filter by job level
-  if (level) {
-    whereClause += ` AND j.level = ?`;
-    params.push(level);
-  }
-
-  // Filter by salary
-  if (minSalary > 0) {
-    // If the max salary of the job doesn't meet the user's minimum requirement, filter it out
-    whereClause += ` AND j.salary_max >= ?`;
-    params.push(minSalary);
-  }
-
-  // Filter by location_country
-  if (isUSA && !isIntl) {
-    whereClause += ` AND j.location_country = ?`;
-    params.push("USA");
-  } else if (isIntl && !isUSA) {
-    whereClause += ` AND j.location_country != ? AND j.location_country IS NOT NULL`;
-    params.push("USA");
-  }
-
-  // 3. Get total count for pagination calculation
-  const [countRes, jobsRes] = await db.batch(
-    [
-      {
-        sql: `SELECT COUNT(*) as total FROM jobs_structured j JOIN company_structured c ON j.company_id = c.company_id ${whereClause}`,
-        args: params,
-      },
-      {
-        sql: `SELECT j.*, c.company_name FROM jobs_structured j JOIN company_structured c ON j.company_id = c.company_id ${whereClause} ORDER BY j.post_at DESC LIMIT ? OFFSET ?`,
-        args: [...params, pageSize, offset],
-      },
-    ],
-    "read",
+  // 2. Query (cached)
+  const { total, jobs } = await getJobsPage(
+    filtersKey,
+    {
+      searchQuery,
+      selectedStacks,
+      isRemote,
+      hasVisa,
+      days,
+      level,
+      minSalary,
+      isUSA,
+      isIntl,
+    },
+    currentPage,
+    pageSize,
   );
-
-  const total = Number(countRes.rows[0].total);
   const totalPages = Math.ceil(total / pageSize);
-  // const jobs = jobsRes.rows as unknown as JobWithCompany[];
-  const jobs = (jobsRes.rows as unknown as JobWithCompany[]).map((job) => ({
-    ...job,
-    post_at: new Date(job.post_at).toISOString().slice(0, 10),
-  }));
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
