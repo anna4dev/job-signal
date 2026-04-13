@@ -68,8 +68,13 @@ export function mergeJobWithOverrides(
 
   if (overrideForJob.salary?.type === "overwrite") {
     const v = overrideForJob.salary.value;
-    effective.salary_min = typeof v.min === "number" ? v.min : null;
-    effective.salary_max = typeof v.max === "number" ? v.max : null;
+    if (v && typeof v === "object") {
+      effective.salary_min = typeof v.min === "number" ? v.min : null;
+      effective.salary_max = typeof v.max === "number" ? v.max : null;
+    } else {
+      effective.salary_min = null;
+      effective.salary_max = null;
+    }
   }
 
   if (overrideForJob.visa_support?.type === "overwrite") {
