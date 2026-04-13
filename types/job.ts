@@ -47,6 +47,9 @@ export interface RecentNews {
 
 // job details
 export interface JobFullDetail extends JobWithCompany {
+  job_raw_id: string;
+  raw_text: string;
+  original_text: string;
   responsibilities: string; // JSON string
   required_skills: string; // JSON string
   risk_flags: string; // JSON string
@@ -64,4 +67,18 @@ export interface JobWithBookmark extends JobWithCompany {
 export interface BookmarkItem {
   job_id: string;
   created_at: number;
+}
+
+export interface RawPostData {
+  job_id: string;
+  job_raw_id: string;
+  salary_min: number | null;
+  salary_max: number | null;
+  location_visa_supported: number | null;
+  raw_text: string;
+}
+
+export interface JobRawPostSectionProps {
+  jobData: RawPostData;
+  baseTechStack: string[];
 }
