@@ -5,9 +5,11 @@ import StackFilter from "@/components/StackFilter";
 import { JOB_OVERRIDES_EVENT } from "@/hooks/useJobEffectiveJob";
 import {
   BaseJobForOverrides,
-  JOB_OVERRIDES_KEY,
+  getJobOverridesFromLocalStorage,
+  mapVisaSupportedValue,
   mergeJobWithOverrides,
   Overrides,
+  setJobOverridesToLocalStorage,
 } from "@/lib/jobOverrides";
 
 type SalaryMode = "not_mentioned" | "range_incorrect";
@@ -55,8 +57,7 @@ export default function ReportIssueSheet({
   useEffect(() => {
     if (!isOpen) return;
     const recompute = () => {
-      const raw = localStorage.getItem(JOB_OVERRIDES_KEY);
-      const overrides = raw ? JSON.parse(raw) : {};
+      const overrides = getJobOverridesFromLocalStorage();
       const current = overrides[jobId];
 
       if (current?.salary?.type === "overwrite") {
@@ -86,16 +87,31 @@ export default function ReportIssueSheet({
   }, [isOpen, jobId, baseJob]);
 
   const onSubmit = async () => {
-    const raw = localStorage.getItem(JOB_OVERRIDES_KEY);
-    const overrides = raw ? JSON.parse(raw) : {};
-    const nextForJob: any = {};
+    const overrides = getJobOverridesFromLocalStorage();
+    const current = overrides[jobId] || {};
+    const nextForJob: Overrides[string] = { ...current };
 
-    if (salaryMode === "range_incorrect") {
-      nextForJob.salary = { type: "overwrite", value: { min: salaryMin, max: salaryMax } };
-    }
-    if (visaMode !== "not_mentioned") {
-      nextForJob.visa_support = { type: "overwrite", value: visaMode === "supported" };
-    }
+    // Explicitly preserve "not mentioned" as a nullable overwrite.
+    nextForJob.salary =
+      salaryMode === "range_incorrect"
+        ? {
+            type: "overwrite",
+            value: { min: salaryMin, max: salaryMax },
+          }
+        : {
+            type: "overwrite",
+            value: { min: null, max: null },
+          };
+
+    nextForJob.visa_support = {
+      type: "overwrite",
+      value:
+        visaMode === "supported"
+          ? true
+          : visaMode === "not_supported"
+            ? false
+            : null,
+    };
     
     const baseSet = new Set(baseTechStack);
     const add = techStackSelected.filter(t => !baseSet.has(t));
@@ -103,19 +119,24 @@ export default function ReportIssueSheet({
     
     if (add.length > 0 || remove.length > 0) {
       nextForJob.tech_stack = { add, remove };
+    } else {
+      delete nextForJob.tech_stack;
     }
 
-    if (Object.keys(nextForJob).length > 0) overrides[jobId] = nextForJob;
-    else delete overrides[jobId];
-
-    localStorage.setItem(JOB_OVERRIDES_KEY, JSON.stringify(overrides));
+    overrides[jobId] = nextForJob;
+    setJobOverridesToLocalStorage(overrides);
     window.dispatchEvent(new CustomEvent(JOB_OVERRIDES_EVENT, { detail: { jobId } }));
 
     // 异步上报 (Backend)
     const anonId = localStorage.getItem(ANONYMOUS_ID_KEY) || crypto.randomUUID();
     localStorage.setItem(ANONYMOUS_ID_KEY, anonId);
 
-    const report = (field: string, type: string, val: any, orig: any) => {
+    const report = (
+      field: string,
+      type: "overwrite" | "add" | "remove",
+      val: unknown,
+      orig: unknown,
+    ) => {
       fetch("/api/job-corrections", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -126,8 +147,20 @@ export default function ReportIssueSheet({
       }).catch(() => {});
     };
 
-    if (nextForJob.salary) report("salary", "overwrite", nextForJob.salary.value, { min: baseSalaryMin, max: baseSalaryMax });
-    if (nextForJob.visa_support) report("visa_support", "overwrite", nextForJob.visa_support.value, baseVisaSupported === 1);
+    if (nextForJob.salary) {
+      report("salary", "overwrite", nextForJob.salary.value, {
+        min: baseSalaryMin,
+        max: baseSalaryMax,
+      });
+    }
+    if (nextForJob.visa_support) {
+      report(
+        "visa_support",
+        "overwrite",
+        nextForJob.visa_support.value,
+        mapVisaSupportedValue(baseVisaSupported),
+      );
+    }
     if (nextForJob.tech_stack) {
        if (nextForJob.tech_stack.add.length) report("tech_stack", "add", nextForJob.tech_stack.add, []);
        if (nextForJob.tech_stack.remove.length) report("tech_stack", "remove", nextForJob.tech_stack.remove, []);

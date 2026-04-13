@@ -8,12 +8,23 @@ export default function JobRawPostSection({
   baseTechStack,
 }: JobRawPostSectionProps) {
   const formatRawText = (raw: string) => {
-    const decoded = decode(raw);
+    const decoded = decode(raw || "");
     return decoded
-      .replace(/<p>/g, "\n\n")
-      .replace(/<\/p>/g, "")
-      .replace(/<br\s*\/?>/g, "\n")
-      .replace(/<[^>]+>/g, "");
+      .replace(/\r\n/g, "\n")
+      // line break tags
+      .replace(/<br\b[^>]*\/?>/gi, "\n")
+      // common block-level opening tags -> start a new paragraph
+      .replace(/<(p|div|li|ul|ol|section|article|h[1-6])\b[^>]*>/gi, "\n\n")
+      // list item closing tags still deserve spacing
+      .replace(/<\/li>/gi, "\n")
+      // block-level closing tags
+      .replace(/<\/(p|div|ul|ol|section|article|h[1-6])>/gi, "\n\n")
+      // strip remaining tags
+      .replace(/<[^>]+>/g, "")
+      // normalize repeated whitespace/newlines
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   };
 
   const processedText = formatRawText(jobData.raw_text);

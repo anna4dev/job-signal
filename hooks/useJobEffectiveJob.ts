@@ -15,19 +15,20 @@ export function useJobEffectiveJob(
   jobId: string,
   baseJob: BaseJobForOverrides,
 ): EffectiveJobForOverrides {
+  const normalizedJobId = String(jobId);
+
   const [effective, setEffective] = useState<EffectiveJobForOverrides>(
-    () => {
-      const overrides = getJobOverridesFromLocalStorage();
-      return mergeJobWithOverrides(baseJob, overrides[jobId]);
-    },
+    () => mergeJobWithOverrides(baseJob, undefined),
   );
 
-  const baseJobMemo = useMemo(() => baseJob, [jobId, baseJob]);
+  const baseJobMemo = useMemo(() => baseJob, [baseJob]);
 
   useEffect(() => {
     const recompute = () => {
       const overrides = getJobOverridesFromLocalStorage();
-      setEffective(mergeJobWithOverrides(baseJobMemo, overrides[jobId]));
+      setEffective(
+        mergeJobWithOverrides(baseJobMemo, overrides[normalizedJobId]),
+      );
     };
 
     recompute();
@@ -35,7 +36,9 @@ export function useJobEffectiveJob(
     const onOverridesUpdated = (e: Event) => {
       const custom = e as CustomEvent;
       const updatedJobId = custom?.detail?.jobId;
-      if (!updatedJobId || updatedJobId === jobId) recompute();
+      if (!updatedJobId || String(updatedJobId) === normalizedJobId) {
+        recompute();
+      }
     };
 
     window.addEventListener(JOB_OVERRIDES_EVENT, onOverridesUpdated);
@@ -51,7 +54,7 @@ export function useJobEffectiveJob(
       window.removeEventListener(JOB_OVERRIDES_EVENT, onOverridesUpdated);
       window.removeEventListener("storage", onStorage);
     };
-  }, [baseJobMemo, jobId]);
+  }, [baseJobMemo, normalizedJobId]);
 
   return effective;
 }

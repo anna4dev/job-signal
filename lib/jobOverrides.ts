@@ -29,6 +29,12 @@ export type EffectiveJobForOverrides = {
 
 export const JOB_OVERRIDES_KEY = "job_overrides_v1";
 
+export function mapVisaSupportedValue(
+  visaSupported: number | null,
+): boolean | null {
+  return visaSupported === 1 ? true : visaSupported === 0 ? false : null;
+}
+
 export function getJobOverridesFromLocalStorage(): Overrides {
   if (typeof window === "undefined") return {};
   try {
@@ -54,12 +60,7 @@ export function mergeJobWithOverrides(
   const effective: EffectiveJobForOverrides = {
     salary_min: baseJob.salary_min,
     salary_max: baseJob.salary_max,
-    location_visa_supported:
-      baseJob.location_visa_supported === 1
-        ? true
-        : baseJob.location_visa_supported === 0
-          ? false
-          : null,
+    location_visa_supported: mapVisaSupportedValue(baseJob.location_visa_supported),
     tech_stack: [...baseJob.tech_stack],
   };
 

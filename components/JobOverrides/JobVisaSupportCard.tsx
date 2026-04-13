@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useJobEffectiveJob } from "@/hooks/useJobEffectiveJob";
 import { BaseJobForOverrides } from "@/lib/jobOverrides";
 
@@ -17,6 +17,14 @@ export default function JobVisaSupportCard({
   baseSalaryMax: number | null;
   baseTechStack: string[];
 }) {
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      setIsMounted(true);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
   const baseJob: BaseJobForOverrides = useMemo(
     () => ({
       job_id: jobId,
@@ -29,11 +37,14 @@ export default function JobVisaSupportCard({
   );
 
   const effective = useJobEffectiveJob(jobId, baseJob);
+  const baseVisa =
+    baseVisaSupported === 1 ? true : baseVisaSupported === 0 ? false : null;
+  const displayVisa = isMounted ? effective.location_visa_supported : baseVisa;
 
   const label =
-    effective.location_visa_supported === true
+    displayVisa === true
       ? "Supported"
-      : effective.location_visa_supported === false
+      : displayVisa === false
         ? "Not Supported"
         : "Not mentioned";
 
