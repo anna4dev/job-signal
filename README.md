@@ -133,16 +133,21 @@ _Goal: Bridge the gap between job data and user intent._
 - [x] **1.1 Enhance Filter**
 - Add `stack` filter.
 
-- [ ] **1.2 Implicit Signals**
+- [x] **1.2 Raw Post & Report Issue**
+- Add `Raw Post` to details page.
+- Add `Report Issue` to details page.
+- Persist `job_overrides_v1` locally.
+
+- [ ] **1.3 Implicit Signals**
 - Update `learnedProfile` based on bookmarks.
 - Update `contextualProfile` based on searches.
 
-- [ ] **1.3 Explicit Signals**
+- [ ] **1.4 Explicit Signals**
 - Define `/profile` structure: `roles`, `expert_stack`, `interested_stack`, `min_salary`, `remote_only`, `locations`.
 - Add profile page to maintain `explicitProfile`.
 - Persist `explicitProfile` locally.
 
-- [ ] **1.4 Unified Signals**
+- [ ] **1.5 Unified Signals**
 - Persist `effectiveProfile` locally.
 
 #### Phase 2: Intelligence & Explainability
@@ -182,6 +187,10 @@ _Goal: Transition from "Local Tool" to "Personal Career Agent."_
 - Allow users to "Follow" a specific filter set (e.g., "Remote React Roles > $120k").
 
 - [ ] **3.3 Cloud Sync & Hybrid State**
+- Overrides Cleanup: 
+    - trusting the updated Agent data 
+    - Time-To-Live: 30 days
+    - Silently remove an override when its value equals the corresponding base job field value (compare per field: salary, visa_support, tech_stack).
 - Migrate `localStorage` profile/bookmarks/filters to DB.
 - Export profile/bookmarks/filters.
 
