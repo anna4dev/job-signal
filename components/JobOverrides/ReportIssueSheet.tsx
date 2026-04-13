@@ -61,9 +61,21 @@ export default function ReportIssueSheet({
       const current = overrides[jobId];
 
       if (current?.salary?.type === "overwrite") {
-        setSalaryMode("range_incorrect");
-        setSalaryMin(current.salary.value.min);
-        setSalaryMax(current.salary.value.max);
+        const v = current.salary.value;
+        const min = typeof v?.min === "number" ? v.min : null;
+        const max = typeof v?.max === "number" ? v.max : null;
+
+        // contains valid values
+        if (min !== null || max !== null) {
+          setSalaryMode("range_incorrect");
+          setSalaryMin(min);
+          setSalaryMax(max);
+        } else {
+          // both null, show not mentioned
+          setSalaryMode("not_mentioned");
+          setSalaryMin(null);
+          setSalaryMax(null);
+        }
       } else {
         setSalaryMode("not_mentioned");
         setSalaryMin(null);
