@@ -190,7 +190,7 @@ _Goal: Transition from "Local Tool" to "Personal Career Agent."_
 - Overrides Cleanup: 
     - trusting the updated Agent data 
     - Time-To-Live: 30 days
-    - Silently remove overrides where override.value is identical to baseJob
+    - Silently remove an override when its value equals the corresponding base job field value (compare per field: salary, visa_support, tech_stack).
 - Migrate `localStorage` profile/bookmarks/filters to DB.
 - Export profile/bookmarks/filters.
 
