@@ -9,27 +9,7 @@ import {
   useTransientFeedback,
 } from "./ActionWithFeedback";
 import { useSavedSearches } from "@/hooks/useSavedSearches";
-
-// Normalize a filter set so no-op values (page, min_salary=0, whitespace-only q,
-// empty strings) are stripped. Returned params are sorted for stable stringification.
-function canonicalizeFilters(
-  input: string | URLSearchParams | Record<string, string>,
-): URLSearchParams {
-  const p = new URLSearchParams(input);
-  p.delete("page");
-
-  const q = p.get("q")?.trim() ?? "";
-  if (q) p.set("q", q);
-  else p.delete("q");
-
-  if (p.get("min_salary") === "0") p.delete("min_salary");
-
-  for (const key of Array.from(p.keys())) {
-    if (!p.get(key)) p.delete(key);
-  }
-  p.sort();
-  return p;
-}
+import { canonicalizeFilters, filterSnapshotKey } from "@/lib/savedSearch";
 
 export default function FilterBar() {
   const router = useRouter();
@@ -138,7 +118,7 @@ export default function FilterBar() {
   const isAlreadySaved = useMemo(() => {
     if (!canonicalKey) return false;
     return savedSearches.some(
-      (s) => canonicalizeFilters(s.filters).toString() === canonicalKey,
+      (s) => filterSnapshotKey(s.filters) === canonicalKey,
     );
   }, [savedSearches, canonicalKey]);
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { filterSnapshotKey } from "@/lib/savedSearch";
 
 export interface SavedSearchItem {
   id: string;
@@ -55,21 +56,6 @@ function subscribe(callback: () => void) {
   };
 }
 
-export const getNormalizedSnapshot = (filters: Record<string, string>) => {
-  const cleanFilters = { ...filters };
-  delete cleanFilters.page;
-  const sortedKeys = Object.keys(cleanFilters).sort();
-  const orderedObj = sortedKeys.reduce(
-    (obj, key) => {
-      obj[key] = cleanFilters[key];
-      return obj;
-    },
-    {} as Record<string, string>,
-  );
-
-  return JSON.stringify(orderedObj);
-};
-
 export function useSavedSearches() {
   const savedSearches = useSyncExternalStore(
     subscribe,
@@ -82,9 +68,9 @@ export function useSavedSearches() {
     filters: Record<string, string>,
   ): { ok: boolean; reason?: "duplicate" | "max_reached" } => {
     const current = readFromStorage();
-    const newSnapshot = getNormalizedSnapshot(filters);
+    const newSnapshot = filterSnapshotKey(filters);
     const isDuplicate = current.some(
-      (item) => getNormalizedSnapshot(item.filters) === newSnapshot,
+      (item) => filterSnapshotKey(item.filters) === newSnapshot,
     );
     if (isDuplicate) return { ok: false, reason: "duplicate" };
     if (current.length >= 5) return { ok: false, reason: "max_reached" };
