@@ -10,6 +10,27 @@ import {
 } from "./ActionWithFeedback";
 import { useSavedSearches } from "@/hooks/useSavedSearches";
 
+// Normalize a filter set so no-op values (page, min_salary=0, whitespace-only q,
+// empty strings) are stripped. Returned params are sorted for stable stringification.
+function canonicalizeFilters(
+  input: string | URLSearchParams | Record<string, string>,
+): URLSearchParams {
+  const p = new URLSearchParams(input);
+  p.delete("page");
+
+  const q = p.get("q")?.trim() ?? "";
+  if (q) p.set("q", q);
+  else p.delete("q");
+
+  if (p.get("min_salary") === "0") p.delete("min_salary");
+
+  for (const key of Array.from(p.keys())) {
+    if (!p.get(key)) p.delete(key);
+  }
+  p.sort();
+  return p;
+}
+
 export default function FilterBar() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -44,14 +65,13 @@ export default function FilterBar() {
   const { feedback: saveFeedback, show: showSaveFeedback } =
     useTransientFeedback(1800);
 
-  const hasMeaningfulFilters = useMemo(() => {
-    const p = new URLSearchParams(searchParams.toString());
-    p.delete("page");
-    for (const [, v] of p.entries()) {
-      if (v !== "") return true;
-    }
-    return false;
-  }, [searchParams]);
+  // Shared by the save button state, saveSearch payload, and duplicate check.
+  const canonicalFilters = useMemo(
+    () => canonicalizeFilters(searchParams),
+    [searchParams],
+  );
+  const canonicalKey = canonicalFilters.toString();
+  const hasMeaningfulFilters = canonicalKey !== "";
 
   const autoName = useMemo(() => {
     const query = searchParams.get("q");
@@ -89,8 +109,7 @@ export default function FilterBar() {
   }, [searchParams]);
   const saveCurrentSearch = () => {
     if (!hasMeaningfulFilters) return;
-    const filters = Object.fromEntries(searchParams.entries());
-    delete filters.page;
+    const filters = Object.fromEntries(canonicalFilters.entries());
     const result = saveSearch(autoName, filters);
     if (result.ok) {
       showSaveFeedback({ text: "Saved", tone: "success" });
@@ -117,18 +136,11 @@ export default function FilterBar() {
   };
 
   const isAlreadySaved = useMemo(() => {
-    const currentParams = new URLSearchParams(searchParams.toString());
-    currentParams.delete("page");
-    currentParams.sort();
-    const currentStr = currentParams.toString();
-  
-    return savedSearches.some(s => {
-      const p = new URLSearchParams(s.filters);
-      p.delete("page");
-      p.sort();
-      return p.toString() === currentStr;
-    });
-  }, [savedSearches, searchParams]);
+    if (!canonicalKey) return false;
+    return savedSearches.some(
+      (s) => canonicalizeFilters(s.filters).toString() === canonicalKey,
+    );
+  }, [savedSearches, canonicalKey]);
 
   return (
     <div className="space-y-4 sticky top-4">
