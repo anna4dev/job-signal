@@ -2,12 +2,18 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import StackFilter from "./StackFilter";
-import { useState } from "react";
-import MonitorSearch from "./MonitorSearch";
+import { useMemo, useState } from "react";
+import SavedSearchSlots from "./SavedSearchSlots";
+import {
+  ActionWithFeedback,
+  useTransientFeedback,
+} from "./ActionWithFeedback";
+import { useSavedSearches } from "@/hooks/useSavedSearches";
 
 export default function FilterBar() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { saveSearch, savedSearches } = useSavedSearches();
 
   // Helper method to update URL parameters
   const updateFilters = (
@@ -31,88 +37,75 @@ export default function FilterBar() {
   const currentLevel = searchParams.get("level") || "";
 
   const [inputValue, setInputValue] = useState(searchParams.get("q") || "");
+  const { feedback: saveFeedback, show: showSaveFeedback } =
+    useTransientFeedback(1800);
+
+  const autoName = useMemo(() => {
+    const query = searchParams.get("q");
+    const level = searchParams.get("level");
+    const minSalary = searchParams.get("min_salary");
+    const isRemote = searchParams.get("remote") === "true";
+    const isVisa = searchParams.get("visa") === "true";
+    const isUSA = searchParams.get("usa") === "true";
+    const isIntl = searchParams.get("intl") === "true";
+    const stacks = searchParams.get("stack")?.split(",").filter(Boolean) || [];
+    const stackLabel =
+      stacks.length > 0
+        ? stacks.length > 2
+          ? `${stacks.slice(0, 2).join("/")}...`
+          : stacks.join("/")
+        : "";
+    const primaryTitle = [query, stackLabel].filter(Boolean).join(" ");
+    return (
+      [
+        primaryTitle,                                 // 1. ai Python/React
+        level,                                        // 2. mid
+        minSalary && minSalary !== "0" 
+          ? `$${Math.round(Number(minSalary) / 1000)}k+` 
+          : "",                                       // 3. $150k+
+        isUSA ? "USA" : isIntl ? "Intl" : "",         // 4. USA/Intl
+        isRemote ? "Remote" : "",                     
+        isVisa ? "Visa" : "",                         // 6. Visa
+      ].filter(Boolean)
+        .join(" · ") || "My Search"
+    ); 
+  }, [searchParams]);
+  const saveCurrentSearch = () => {
+    const filters = Object.fromEntries(searchParams.entries());
+    delete filters.page;
+    const result = saveSearch(autoName, filters);
+    if (result.ok) {
+      showSaveFeedback({ text: "Saved", tone: "success" });
+    } else if (result.reason === "max_reached") {
+      showSaveFeedback({
+        text: "Limit: 5 saved searches. Remove one first.",
+        tone: "warning",
+      });
+    } else {
+      showSaveFeedback({
+        text: "Same search already saved.",
+        tone: "info",
+      });
+    }
+  };
+
+  const isAlreadySaved = useMemo(() => {
+    const currentParams = new URLSearchParams(searchParams.toString());
+    currentParams.delete("page");
+    currentParams.sort();
+    const currentStr = currentParams.toString();
+  
+    return savedSearches.some(s => {
+      const p = new URLSearchParams(s.filters);
+      p.delete("page");
+      p.sort();
+      return p.toString() === currentStr;
+    });
+  }, [savedSearches, searchParams]);
 
   return (
     <div className="space-y-4 sticky top-4">
-      <MonitorSearch />
-      {/* {hasActiveFilters && (
-        <div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-slate-700 tracking-tight">
-                Save this search
-              </span>
-
-              <div className="group relative leading-none">
-                <svg
-                  className="w-4 h-4 text-slate-400 cursor-help"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-
-                <div className="absolute top-full left-0 mt-2 w-48 p-2 bg-slate-800 text-[10px] text-white rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 leading-relaxed">
-                  Saved locally. No data ever leaves your device.
-                  <div className="absolute bottom-full left-2 border-8 border-transparent border-b-slate-800"></div>
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setIsSaving(!isSaving)}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full hover:bg-blue-500 cursor-pointer transition-colors ${
-                isSaving ? "bg-blue-400" : "bg-slate-200"
-              }`}
-            >
-              <span
-                className={`inline-block h-3 w-3 transform rounded-full bg-white transition ${
-                  isSaving ? "translate-x-5" : "translate-x-1"
-                }`}
-              />
-            </button>
-          </div>
-
-          <div
-            className={`grid transition-all duration-300 ease-in-out ${
-              isSaving
-                ? "grid-rows-[1fr] opacity-100 mt-2"
-                : "grid-rows-[0fr] opacity-0 mt-0"
-            }`}
-          >
-            <div className="overflow-hidden">
-              <div className="pt-2 ">
-                <input
-                  type="text"
-                  ref={saveInputRef}
-                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-500 outline-none"
-                  defaultValue={autoGeneratedName}
-                />
-                <div className="mt-2 flex items-center justify-end gap-2">
-                  <button
-                    onClick={() => setIsSaving(false)}
-                    className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleConfirmSave}
-                    className="px-2 py-1 bg-blue-400 text-white text-xs font-bold rounded-md cursor-pointer hover:bg-blue-500 transition-all active:scale-95"
-                  >
-                    Confirm
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )} */}
+      <SavedSearchSlots />
       {/* 1. Keyword Search */}
       <div>
         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 block">
@@ -265,15 +258,31 @@ export default function FilterBar() {
             : "invisible opacity-0"
         }`}
       >
-        <button
-          onClick={() => {
-            setInputValue("");
-            router.push("/");
-          }}
-          className="w-full py-2 text-xs font-bold text-red-500 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-100 transition-all"
-        >
-          Clear All Filters
-        </button>
+        <div className="flex items-center justify-between gap-2">
+          <button
+            onClick={() => {
+              setInputValue("");
+              router.push("/");
+            }}
+            className="py-2 text-xs font-bold text-red-500 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-100 transition-all px-2"
+          >
+            Clear All Filters
+          </button>
+          <ActionWithFeedback feedback={saveFeedback}>
+            <button
+              type="button"
+              onClick={saveCurrentSearch}
+              disabled={isAlreadySaved}
+              className={`text-xs font-bold rounded-md transition-all ${
+                isAlreadySaved
+                  ? "text-slate-400 cursor-not-allowed"
+                  : "text-blue-600 cursor-pointer"
+              }`}
+            >
+              {isAlreadySaved ? "Saved to Monitoring" : "Save Current"}
+            </button>
+          </ActionWithFeedback>
+        </div>
       </div>
       {/* 7. AD */}
       <div className="mt-10 p-4 bg-blue-50 rounded-xl border border-blue-100">
