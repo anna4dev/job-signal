@@ -44,6 +44,9 @@ export default function FilterBar() {
     const query = searchParams.get("q");
     const level = searchParams.get("level");
     const minSalary = searchParams.get("min_salary");
+    const days = searchParams.get("days") || "";
+    const recencyToken =
+      days && /^\d+$/.test(days) ? `${days}d` : "";
     const isRemote = searchParams.get("remote") === "true";
     const isVisa = searchParams.get("visa") === "true";
     const isUSA = searchParams.get("usa") === "true";
@@ -66,6 +69,7 @@ export default function FilterBar() {
         isUSA ? "USA" : isIntl ? "Intl" : "",         // 4. USA/Intl
         isRemote ? "Remote" : "",                     
         isVisa ? "Visa" : "",                         // 6. Visa
+        recencyToken,                                 // 7. 7d / 30d when Date Posted is set
       ].filter(Boolean)
         .join(" · ") || "My Search"
     ); 
@@ -76,17 +80,26 @@ export default function FilterBar() {
     const result = saveSearch(autoName, filters);
     if (result.ok) {
       showSaveFeedback({ text: "Saved", tone: "success" });
-    } else if (result.reason === "max_reached") {
+      return;
+    }
+    if (result.reason === "max_reached") {
       showSaveFeedback({
         text: "Limit: 5 saved searches. Remove one first.",
         tone: "warning",
       });
-    } else {
+      return;
+    } 
+    if(result.reason === "duplicate") {
       showSaveFeedback({
         text: "Same search already saved.",
         tone: "info",
       });
+      return;
     }
+    showSaveFeedback({
+      text: "Something went wrong. Please try again.",
+      tone: "warning",
+    });
   };
 
   const isAlreadySaved = useMemo(() => {

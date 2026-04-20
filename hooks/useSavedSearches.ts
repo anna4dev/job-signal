@@ -20,10 +20,10 @@ let cacheRaw: string | null = null;
 
 function readFromStorage(): SavedSearchItem[] {
   if (typeof window === "undefined") return EMPTY_CACHE;
+  let raw: string | null = null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    raw = localStorage.getItem(STORAGE_KEY);
     if (raw === cacheRaw) return cache;
-    cacheRaw = raw;
     const parsed = raw ? (JSON.parse(raw) as Partial<SavedSearchItem>[]) : [];
     cache = (Array.isArray(parsed) ? parsed : []).map((item) => ({
       id: String(item.id || Date.now()),
@@ -33,9 +33,12 @@ function readFromStorage(): SavedSearchItem[] {
       useCount: typeof item.useCount === "number" ? item.useCount : 0,
       lastUsedAt: String(item.lastUsedAt || item.createdAt || new Date().toISOString()),
     }));
+    cacheRaw = raw;
     return cache;
   } catch {
-    return EMPTY_CACHE;
+    cache = EMPTY_CACHE;
+    cacheRaw = raw;
+    return cache;
   }
 }
 

@@ -126,13 +126,13 @@ npm run dev
 
 Future updates will follow this priority order:
 
-#### Phase 1: Discovery Foundation
+### Phase 1: Discovery Foundation
 
 _Goal: Make job discovery fast, reusable, and trustworthy._
 
 - [x] **1.1 Query & Filter UX**
 - Stack filter and core search filters are available.
-- Stable, shareable query-string based filter state.
+- Stable, shareable query-string-based filter state.
 
 - [x] **1.2 Job Details Trust Layer**
 - Add `Raw Post` panel in details.
@@ -148,7 +148,7 @@ _Goal: Make job discovery fast, reusable, and trustworthy._
 - Add status to bookmarks (Saved/Applied/Interviewing/Offer/Rejected).
 - Use lifecycle as downstream implicit signal input.
 
-#### Phase 2: Profile & Signals Layer
+### Phase 2: Profile & Signals Layer
 
 _Goal: Build stable matching inputs before introducing ranking complexity._
 
@@ -164,7 +164,7 @@ _Goal: Build stable matching inputs before introducing ranking complexity._
 - Harden signal extraction from bookmarks/searches.
 - Define stable factor mapping for fit explanations.
 
-#### Phase 3: Fit v1 (Deterministic + Explainable)
+### Phase 3: Fit v1 (Deterministic + Explainable)
 
 _Goal: Ship practical matching with clear reasons, not black-box scoring._
 
@@ -179,7 +179,7 @@ _Goal: Ship practical matching with clear reasons, not black-box scoring._
 - Keep collecting structured corrections/feedback.
 - Use feedback for monitoring and future tuning (not auto-learning yet).
 
-#### Phase 4: Identity & Sync Layer
+### Phase 4: Identity & Sync Layer
 
 _Goal: Add account and multi-device consistency after core local-first value is proven._
 
@@ -190,7 +190,7 @@ _Goal: Add account and multi-device consistency after core local-first value is 
 - Sync profile/bookmarks/saved-searches/overrides to cloud.
 - Add data export.
 
-#### Phase 5: Retention & Outbound Value
+### Phase 5: Retention & Outbound Value
 
 _Goal: Proactive engagement on top of stable fit quality._
 
