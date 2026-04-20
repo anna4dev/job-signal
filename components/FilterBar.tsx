@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import StackFilter from "./StackFilter";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import SavedSearchSlots from "./SavedSearchSlots";
 import {
   ActionWithFeedback,
@@ -36,9 +36,22 @@ export default function FilterBar() {
   const currentDays = searchParams.get("days") || "";
   const currentLevel = searchParams.get("level") || "";
 
-  const [inputValue, setInputValue] = useState(searchParams.get("q") || "");
+  const qFromUrl = searchParams.get("q") || "";
+  const [inputValue, setInputValue] = useState(qFromUrl);
+  useEffect(() => {
+    setInputValue(qFromUrl);
+  }, [qFromUrl]);
   const { feedback: saveFeedback, show: showSaveFeedback } =
     useTransientFeedback(1800);
+
+  const hasMeaningfulFilters = useMemo(() => {
+    const p = new URLSearchParams(searchParams.toString());
+    p.delete("page");
+    for (const [, v] of p.entries()) {
+      if (v !== "") return true;
+    }
+    return false;
+  }, [searchParams]);
 
   const autoName = useMemo(() => {
     const query = searchParams.get("q");
@@ -75,6 +88,7 @@ export default function FilterBar() {
     ); 
   }, [searchParams]);
   const saveCurrentSearch = () => {
+    if (!hasMeaningfulFilters) return;
     const filters = Object.fromEntries(searchParams.entries());
     delete filters.page;
     const result = saveSearch(autoName, filters);
@@ -281,20 +295,22 @@ export default function FilterBar() {
           >
             Clear All Filters
           </button>
-          <ActionWithFeedback feedback={saveFeedback}>
-            <button
-              type="button"
-              onClick={saveCurrentSearch}
-              disabled={isAlreadySaved}
-              className={`text-xs font-bold rounded-md transition-all ${
-                isAlreadySaved
-                  ? "text-slate-400 cursor-not-allowed"
-                  : "text-blue-600 cursor-pointer"
-              }`}
-            >
-              {isAlreadySaved ? "Saved to Monitoring" : "Save Current"}
-            </button>
-          </ActionWithFeedback>
+          {hasMeaningfulFilters && (
+            <ActionWithFeedback feedback={saveFeedback}>
+              <button
+                type="button"
+                onClick={saveCurrentSearch}
+                disabled={isAlreadySaved}
+                className={`text-xs font-bold rounded-md transition-all ${
+                  isAlreadySaved
+                    ? "text-slate-400 cursor-not-allowed"
+                    : "text-blue-600 cursor-pointer"
+                }`}
+              >
+                {isAlreadySaved ? "Saved to Monitoring" : "Save Current"}
+              </button>
+            </ActionWithFeedback>
+          )}
         </div>
       </div>
       {/* 7. AD */}
