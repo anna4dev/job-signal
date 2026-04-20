@@ -53,18 +53,20 @@ export default function FilterBar() {
   const canonicalKey = canonicalFilters.toString();
   const hasMeaningfulFilters = canonicalKey !== "";
 
+  // Read from canonicalFilters (not raw searchParams) so a manually edited URL
+  // with whitespace `q`, min_salary=0, or empty values doesn't leak into labels.
   const autoName = useMemo(() => {
-    const query = searchParams.get("q");
-    const level = searchParams.get("level");
-    const minSalary = searchParams.get("min_salary");
-    const days = searchParams.get("days") || "";
-    const recencyToken =
-      days && /^\d+$/.test(days) ? `${days}d` : "";
-    const isRemote = searchParams.get("remote") === "true";
-    const isVisa = searchParams.get("visa") === "true";
-    const isUSA = searchParams.get("usa") === "true";
-    const isIntl = searchParams.get("intl") === "true";
-    const stacks = searchParams.get("stack")?.split(",").filter(Boolean) || [];
+    const query = canonicalFilters.get("q") ?? "";
+    const level = canonicalFilters.get("level") ?? "";
+    const minSalary = canonicalFilters.get("min_salary");
+    const days = canonicalFilters.get("days") ?? "";
+    const recencyToken = /^\d+$/.test(days) ? `${days}d` : "";
+    const isRemote = canonicalFilters.get("remote") === "true";
+    const isVisa = canonicalFilters.get("visa") === "true";
+    const isUSA = canonicalFilters.get("usa") === "true";
+    const isIntl = canonicalFilters.get("intl") === "true";
+    const stacks =
+      canonicalFilters.get("stack")?.split(",").filter(Boolean) ?? [];
     const stackLabel =
       stacks.length > 0
         ? stacks.length > 2
@@ -72,21 +74,25 @@ export default function FilterBar() {
           : stacks.join("/")
         : "";
     const primaryTitle = [query, stackLabel].filter(Boolean).join(" ");
+    const minSalaryNum = minSalary ? Number(minSalary) : NaN;
+    const salaryToken =
+      Number.isFinite(minSalaryNum) && minSalaryNum > 0
+        ? `$${Math.round(minSalaryNum / 1000)}k+`
+        : "";
     return (
       [
-        primaryTitle,                                 // 1. ai Python/React
-        level,                                        // 2. mid
-        minSalary && minSalary !== "0" 
-          ? `$${Math.round(Number(minSalary) / 1000)}k+` 
-          : "",                                       // 3. $150k+
-        isUSA ? "USA" : isIntl ? "Intl" : "",         // 4. USA/Intl
-        isRemote ? "Remote" : "",                     
-        isVisa ? "Visa" : "",                         // 6. Visa
-        recencyToken,                                 // 7. 7d / 30d when Date Posted is set
-      ].filter(Boolean)
+        primaryTitle, // 1. ai Python/React
+        level, // 2. mid
+        salaryToken, // 3. $150k+
+        isUSA ? "USA" : isIntl ? "Intl" : "", // 4. USA/Intl
+        isRemote ? "Remote" : "", // 5. Remote
+        isVisa ? "Visa" : "", // 6. Visa
+        recencyToken, // 7. 7d / 30d when Date Posted is set
+      ]
+        .filter(Boolean)
         .join(" · ") || "My Search"
-    ); 
-  }, [searchParams]);
+    );
+  }, [canonicalFilters]);
   const saveCurrentSearch = () => {
     if (!hasMeaningfulFilters) return;
     const filters = Object.fromEntries(canonicalFilters.entries());
@@ -102,10 +108,17 @@ export default function FilterBar() {
       });
       return;
     } 
-    if(result.reason === "duplicate") {
+    if (result.reason === "duplicate") {
       showSaveFeedback({
         text: "Same search already saved.",
         tone: "info",
+      });
+      return;
+    }
+    if (result.reason === "storage_error") {
+      showSaveFeedback({
+        text: "Storage unavailable. Check browser settings.",
+        tone: "warning",
       });
       return;
     }

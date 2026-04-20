@@ -56,6 +56,19 @@ function subscribe(callback: () => void) {
   };
 }
 
+// localStorage.setItem can throw synchronously (quota, private mode, disabled
+// storage). Wrap writes so callers never see an exception bubble up.
+function writeToStorage(next: SavedSearchItem[]): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    window.dispatchEvent(new Event(EVENT_KEY));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function useSavedSearches() {
   const savedSearches = useSyncExternalStore(
     subscribe,
@@ -66,7 +79,10 @@ export function useSavedSearches() {
   const saveSearch = (
     name: string,
     filters: Record<string, string>,
-  ): { ok: boolean; reason?: "duplicate" | "max_reached" } => {
+  ): {
+    ok: boolean;
+    reason?: "duplicate" | "max_reached" | "storage_error";
+  } => {
     const current = readFromStorage();
     const newSnapshot = filterSnapshotKey(filters);
     const isDuplicate = current.some(
@@ -84,16 +100,14 @@ export function useSavedSearches() {
       lastUsedAt: new Date().toISOString(),
     };
     const next = [newEntry, ...current];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    window.dispatchEvent(new Event(EVENT_KEY));
+    if (!writeToStorage(next)) return { ok: false, reason: "storage_error" };
     return { ok: true };
   };
 
   const removeSearch = (id: string) => {
     const current = readFromStorage();
     const next = current.filter((item) => item.id !== id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    window.dispatchEvent(new Event("search-change"));
+    writeToStorage(next);
   };
 
   const touchSearch = (id: string) => {
@@ -107,8 +121,7 @@ export function useSavedSearches() {
           }
         : item,
     );
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    window.dispatchEvent(new Event(EVENT_KEY));
+    writeToStorage(next);
   };
 
   return { savedSearches, saveSearch, removeSearch, touchSearch };
