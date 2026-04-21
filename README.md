@@ -126,78 +126,73 @@ npm run dev
 
 Future updates will follow this priority order:
 
-#### Phase 1: The Matching Foundation
+### Phase 1: Discovery Foundation
 
-_Goal: Bridge the gap between job data and user intent._
+_Goal: Make job discovery fast, reusable, and trustworthy._
 
-- [x] **1.1 Enhance Filter**
-- Add `stack` filter.
+- [x] **1.1 Query & Filter UX**
+- Stack filter and core search filters are available.
+- Stable, shareable query-string-based filter state.
 
-- [x] **1.2 Raw Post & Report Issue**
-- Add `Raw Post` to details page.
-- Add `Report Issue` to details page.
-- Persist `job_overrides_v1` locally.
+- [x] **1.2 Job Details Trust Layer**
+- Add `Raw Post` panel in details.
+- Add structured `Report Issue` workflow.
+- Persist `job_overrides_v1` locally and apply immediate UI overrides.
 
-- [ ] **1.3 Implicit Signals**
-- Update `learnedProfile` based on bookmarks.
-- Update `contextualProfile` based on searches.
+- [x] **1.3 Saved Filters / Saved Searches (Local-First MVP)**
+- Save current filter snapshots locally.
+- Manage and re-apply saved searches from `/searches`.
+- No login required.
 
-- [ ] **1.4 Explicit Signals**
-- Define `/profile` structure: `roles`, `expert_stack`, `interested_stack`, `min_salary`, `remote_only`, `locations`.
-- Add profile page to maintain `explicitProfile`.
+- [ ] **1.4 Bookmarks + Lifecycle**
+- Add status to bookmarks (Saved/Applied/Interviewing/Offer/Rejected).
+- Use lifecycle as downstream implicit signal input.
+
+### Phase 2: Profile & Signals Layer
+
+_Goal: Build stable matching inputs before introducing ranking complexity._
+
+- [ ] **2.1 Explicit Profile (Local-First)**
+- `/profile` page for roles, stack, salary, remote/visa, locations.
 - Persist `explicitProfile` locally.
 
-- [ ] **1.5 Unified Signals**
-- Persist `effectiveProfile` locally.
+- [ ] **2.2 Unified Signals Contract**
+- Define `explicitProfile + implicitSignals + contextualSignals`.
+- Persist `unifiedSignals` locally for downstream fit usage.
 
-#### Phase 2: Intelligence & Explainability
+- [ ] **2.3 Signal Quality & Explainability Prep**
+- Harden signal extraction from bookmarks/searches.
+- Define stable factor mapping for fit explanations.
 
-_Goal: Quantify "Fit" and eliminate the "Black Box" feeling._
+### Phase 3: Fit v1 (Deterministic + Explainable)
 
-- [ ] **2.1 Deterministic Fit-Score Engine**
-- Create a calculation utility.
-- Weighting.
+_Goal: Ship practical matching with clear reasons, not black-box scoring._
 
-- [ ] **2.2 "Jobs Fit Me" View**
-- Add best match results sorting by `fitScore` DESC.
-- Visual tags (e.g., "Stack Match", "Salary Match") to justify the score.
-- Add feedback to adjust weighting.
+- [ ] **3.1 Deterministic Fit Engine**
+- Deterministic utility outputs `fitScore + reasonTags + factorBreakdown`.
 
-- [ ] **2.3 Unified Advanced Sorting**
-- Toggle between `Best Fit`, `Newest`, and `Highest Pay`.
+- [ ] **3.2 Best Fit View + Sort Toggle**
+- Toggle `Best Fit`, `Newest`, `Highest Pay`.
+- Show fit score and reason tags in job cards.
 
-- [ ] **2.4 Job Lifecycle**
-- Add status field to bookmark model and toggle in UI (e.g., Saved/Applied/Interviewing/Offer/Rejected)
-- Add status grouping in bookmarks page
-- Use job lifecycle as implicit matching signal
+- [ ] **3.3 Feedback Collection**
+- Keep collecting structured corrections/feedback.
+- Use feedback for monitoring and future tuning (not auto-learning yet).
 
-- [] **2.5 Company Intelligence Layer**
-- Add `/company/[company_id]` page
-- Show company info, aggregated jobs
-- bookmark
+### Phase 4: Identity & Sync Layer
 
-#### Phase 3: The Identity & Sync Layer
+_Goal: Add account and multi-device consistency after core local-first value is proven._
 
-_Goal: Transition from "Local Tool" to "Personal Career Agent."_
-
-- [ ] **3.1 Identity Gateway**
+- [ ] **4.1 Identity Gateway**
 - Implement OAuth.
 
-- [ ] **3.2 Saved Searches**
-- Allow users to "Follow" a specific filter set (e.g., "Remote React Roles > $120k").
+- [ ] **4.2 Cloud Sync & Hybrid State**
+- Sync profile/bookmarks/saved-searches/overrides to cloud.
+- Add data export.
 
-- [ ] **3.3 Cloud Sync & Hybrid State**
-- Overrides Cleanup: 
-    - trusting the updated Agent data 
-    - Time-To-Live: 30 days
-    - Silently remove an override when its value equals the corresponding base job field value (compare per field: salary, visa_support, tech_stack).
-- Migrate `localStorage` profile/bookmarks/filters to DB.
-- Export profile/bookmarks/filters.
+### Phase 5: Retention & Outbound Value
 
-#### Phase 4: Retention & Outbound Value
+_Goal: Proactive engagement on top of stable fit quality._
 
-_Goal: Proactive engagement._
-
-- [ ] **4.1 Match Alert**
-- Background job (Cron) to run the `Fit-Score Engine`.
-- Send notifications for jobs meeting user fits.
+- [ ] **5.1 Match Alerts**
+- Cron job executes fit and sends notifications.

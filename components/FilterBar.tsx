@@ -2,11 +2,19 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import StackFilter from "./StackFilter";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import SavedSearchSlots from "./SavedSearchSlots";
+import {
+  ActionWithFeedback,
+  useTransientFeedback,
+} from "./ActionWithFeedback";
+import { useSavedSearches } from "@/hooks/useSavedSearches";
+import { canonicalizeFilters, filterSnapshotKey } from "@/lib/savedSearch";
 
 export default function FilterBar() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { saveSearch, savedSearches } = useSavedSearches();
 
   // Helper method to update URL parameters
   const updateFilters = (
@@ -29,10 +37,107 @@ export default function FilterBar() {
   const currentDays = searchParams.get("days") || "";
   const currentLevel = searchParams.get("level") || "";
 
-  const [inputValue, setInputValue] = useState(searchParams.get("q") || "");
+  const qFromUrl = searchParams.get("q") || "";
+  const [inputValue, setInputValue] = useState(qFromUrl);
+  useEffect(() => {
+    setInputValue(qFromUrl);
+  }, [qFromUrl]);
+  const { feedback: saveFeedback, show: showSaveFeedback } =
+    useTransientFeedback(1800);
+
+  // Shared by the save button state, saveSearch payload, and duplicate check.
+  const canonicalFilters = useMemo(
+    () => canonicalizeFilters(searchParams),
+    [searchParams],
+  );
+  const canonicalKey = canonicalFilters.toString();
+  const hasMeaningfulFilters = canonicalKey !== "";
+
+  // Read from canonicalFilters (not raw searchParams) so a manually edited URL
+  // with whitespace `q`, min_salary=0, or empty values doesn't leak into labels.
+  const autoName = useMemo(() => {
+    const query = canonicalFilters.get("q") ?? "";
+    const level = canonicalFilters.get("level") ?? "";
+    const minSalary = canonicalFilters.get("min_salary");
+    const days = canonicalFilters.get("days") ?? "";
+    const recencyToken = /^\d+$/.test(days) ? `${days}d` : "";
+    const isRemote = canonicalFilters.get("remote") === "true";
+    const isVisa = canonicalFilters.get("visa") === "true";
+    const isUSA = canonicalFilters.get("usa") === "true";
+    const isIntl = canonicalFilters.get("intl") === "true";
+    const stacks =
+      canonicalFilters.get("stack")?.split(",").filter(Boolean) ?? [];
+    const stackLabel =
+      stacks.length > 0
+        ? stacks.length > 2
+          ? `${stacks.slice(0, 2).join("/")}...`
+          : stacks.join("/")
+        : "";
+    const primaryTitle = [query, stackLabel].filter(Boolean).join(" ");
+    const minSalaryNum = minSalary ? Number(minSalary) : NaN;
+    const salaryToken =
+      Number.isFinite(minSalaryNum) && minSalaryNum > 0
+        ? `$${Math.round(minSalaryNum / 1000)}k+`
+        : "";
+    return (
+      [
+        primaryTitle, // 1. ai Python/React
+        level, // 2. mid
+        salaryToken, // 3. $150k+
+        isUSA ? "USA" : isIntl ? "Intl" : "", // 4. USA/Intl
+        isRemote ? "Remote" : "", // 5. Remote
+        isVisa ? "Visa" : "", // 6. Visa
+        recencyToken, // 7. 7d / 30d when Date Posted is set
+      ]
+        .filter(Boolean)
+        .join(" · ") || "My Search"
+    );
+  }, [canonicalFilters]);
+  const saveCurrentSearch = () => {
+    if (!hasMeaningfulFilters) return;
+    const filters = Object.fromEntries(canonicalFilters.entries());
+    const result = saveSearch(autoName, filters);
+    if (result.ok) {
+      showSaveFeedback({ text: "Saved", tone: "success" });
+      return;
+    }
+    if (result.reason === "max_reached") {
+      showSaveFeedback({
+        text: "Limit: 5 saved searches. Remove one first.",
+        tone: "warning",
+      });
+      return;
+    } 
+    if (result.reason === "duplicate") {
+      showSaveFeedback({
+        text: "Same search already saved.",
+        tone: "info",
+      });
+      return;
+    }
+    if (result.reason === "storage_error") {
+      showSaveFeedback({
+        text: "Storage unavailable. Check browser settings.",
+        tone: "warning",
+      });
+      return;
+    }
+    showSaveFeedback({
+      text: "Something went wrong. Please try again.",
+      tone: "warning",
+    });
+  };
+
+  const isAlreadySaved = useMemo(() => {
+    if (!canonicalKey) return false;
+    return savedSearches.some(
+      (s) => filterSnapshotKey(s.filters) === canonicalKey,
+    );
+  }, [savedSearches, canonicalKey]);
 
   return (
-    <div className="space-y-8 sticky top-4">
+    <div className="space-y-4 sticky top-4">
+      <SavedSearchSlots />
       {/* 1. Keyword Search */}
       <div>
         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 block">
@@ -53,9 +158,7 @@ export default function FilterBar() {
           />
         </div>
       </div>
-
       <StackFilter />
-
       {/* 2. Location Scope (New) */}
       <div className="space-y-3">
         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1 block">
@@ -86,7 +189,6 @@ export default function FilterBar() {
           </label>
         </div>
       </div>
-
       {/* 3. Core Requirements */}
       <div className="space-y-3">
         <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">
@@ -117,7 +219,6 @@ export default function FilterBar() {
           </label>
         </div>
       </div>
-
       {/* 4. Experience Level */}
       <div>
         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 block">
@@ -135,7 +236,6 @@ export default function FilterBar() {
           <option value="staff">Staff / Principal</option>
         </select>
       </div>
-
       {/* 2. Posted Date (Recency) */}
       <div>
         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 block">
@@ -162,7 +262,6 @@ export default function FilterBar() {
           ))}
         </select>
       </div>
-
       {/* 5. Salary Threshold */}
       <div>
         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 block">
@@ -183,7 +282,6 @@ export default function FilterBar() {
           </span>
         </div>
       </div>
-
       {/* 6. Clear All Filters */}
       <div
         className={`w-full transition-all ${
@@ -192,17 +290,34 @@ export default function FilterBar() {
             : "invisible opacity-0"
         }`}
       >
-        <button
-          onClick={() => {
-            setInputValue("");
-            router.push("/");
-          }}
-          className="w-full py-2 text-xs font-bold text-red-500 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-100 transition-all"
-        >
-          Clear All Filters
-        </button>
+        <div className="flex items-center justify-between gap-2">
+          <button
+            onClick={() => {
+              setInputValue("");
+              router.push("/");
+            }}
+            className="py-2 text-xs font-bold text-red-500 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-100 transition-all px-2"
+          >
+            Clear All Filters
+          </button>
+          {hasMeaningfulFilters && (
+            <ActionWithFeedback feedback={saveFeedback}>
+              <button
+                type="button"
+                onClick={saveCurrentSearch}
+                disabled={isAlreadySaved}
+                className={`text-xs font-bold rounded-md transition-all ${
+                  isAlreadySaved
+                    ? "text-slate-400 cursor-not-allowed"
+                    : "text-blue-600 cursor-pointer"
+                }`}
+              >
+                {isAlreadySaved ? "Saved to Monitoring" : "Save Current"}
+              </button>
+            </ActionWithFeedback>
+          )}
+        </div>
       </div>
-
       {/* 7. AD */}
       <div className="mt-10 p-4 bg-blue-50 rounded-xl border border-blue-100">
         <h3 className="text-sm font-semibold text-blue-900">About this tool</h3>
