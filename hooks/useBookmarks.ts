@@ -115,22 +115,16 @@ export function useBookmarks() {
     writeToStorage(next);
   };
 
-  // Last-write-wins: only writes when now >= existing status_updated_at,
-  // preventing cross-tab/cross-component state regression.
+  // Plain last-click-wins — no timestamp comparison.
+  // Local clocks are untrusted; whoever clicked last simply wins.
+  // status_updated_at is recorded only for UI display (sort order, "Updated at" label).
   const setBookmarkStatus = (jobId: string, status: BookmarkStatus) => {
     const current = readFromStorage();
-    const now = Date.now();
     let didChange = false;
     const next = current.map((item) => {
       if (item.job_id !== jobId) return item;
-      if (
-        item.status_updated_at !== undefined &&
-        now < item.status_updated_at
-      ) {
-        return item;
-      }
       didChange = true;
-      return { ...item, status, status_updated_at: now };
+      return { ...item, status, status_updated_at: Date.now() };
     });
     if (didChange) writeToStorage(next);
   };

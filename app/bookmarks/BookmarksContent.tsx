@@ -48,10 +48,26 @@ export default function BookmarksContent() {
   const [loading, setLoading] = useState(true);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  // Filtered bookmark list that drives pagination and fetch
+  // Filtered + sorted bookmark list that drives pagination and fetch.
+  // Sort key: status_updated_at (when user last acted) falling back to created_at, descending.
   const filteredBookmarks = useMemo(
-    () => bookmarks.filter((item) => matchesTab(item, activeTab)),
+    () =>
+      bookmarks
+        .filter((item) => matchesTab(item, activeTab))
+        .sort((a, b) => {
+          const aTime = a.status_updated_at ?? a.created_at;
+          const bTime = b.status_updated_at ?? b.created_at;
+          return bTime - aTime;
+        }),
     [bookmarks, activeTab],
+  );
+
+  // Stable identity key derived from the actual payload sent to the API.
+  // Changes whenever job membership or any status changes — catches same-length mutations
+  // that filteredBookmarks.length alone would miss (e.g. Saved → Applied on the All tab).
+  const filteredKey = useMemo(
+    () => filteredBookmarks.map((b) => `${b.job_id}:${b.status ?? ""}`).join("|"),
+    [filteredBookmarks],
   );
 
   // Per-tab counts
@@ -112,7 +128,7 @@ export default function BookmarksContent() {
 
     loadData();
     return () => controller.abort();
-  }, [currentPage, filteredBookmarks.length, activeTab]);
+  }, [currentPage, filteredKey, activeTab]);
 
   // Keep displayed list in sync when a bookmark is removed mid-view
   useEffect(() => {
@@ -276,7 +292,11 @@ export default function BookmarksContent() {
                 <div key={job.job_id} className="flex flex-col">
                   {bookmark && (
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2">
-                      <div className="flex-1 text-sm text-slate-400 px-3">Saved at {new Date(bookmark.created_at).toLocaleDateString()}</div>
+                      <div className="flex-1 text-sm text-slate-400 px-3">
+                        {bookmark.status_updated_at
+                          ? `Updated at ${new Date(bookmark.status_updated_at).toLocaleString()}`
+                          : `Added on ${new Date(bookmark.created_at).toLocaleString()}`}
+                      </div>
                       <BookmarkStatusPicker
                           jobId={job.job_id}
                           currentStatus={bookmark.status}
