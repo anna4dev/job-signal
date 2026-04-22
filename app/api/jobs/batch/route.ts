@@ -37,6 +37,8 @@ export async function POST(req: Request) {
       return {
         ...row,
         bookmarked_at: bookmark ? bookmark.created_at : null,
+        // undefined = user has not explicitly set a status (not the same as 'Saved')
+        bookmark_status: bookmark?.status,
       };
     });
 

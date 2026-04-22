@@ -144,7 +144,7 @@ _Goal: Make job discovery fast, reusable, and trustworthy._
 - Manage and re-apply saved searches from `/searches`.
 - No login required.
 
-- [ ] **1.4 Bookmarks + Lifecycle**
+- [x] **1.4 Bookmarks + Lifecycle**
 - Add status to bookmarks (Saved/Applied/Interviewing/Offer/Rejected).
 - Use lifecycle as downstream implicit signal input.
 

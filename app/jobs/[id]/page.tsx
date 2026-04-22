@@ -4,6 +4,7 @@ import { Metadata } from "next";
 import { JobFullDetail, RiskFlag, RecentNews, RawPostData } from "@/types/job";
 import JobDetailNav from "@/components/JobDetailNav";
 import BookmarkEntry from "@/components/BookmarkEntry";
+import BookmarkStatusSection from "@/components/BookmarkStatusSection";
 import Footer from "@/components/Footer";
 import JobSalaryCard from "@/components/JobOverrides/JobSalaryCard";
 import JobVisaSupportCard from "@/components/JobOverrides/JobVisaSupportCard";
@@ -285,6 +286,9 @@ export default async function JobDetailPage({
 
           {/* Right Sidebar */}
           <div className="space-y-6">
+            {/* Application Status — shown only when job is bookmarked */}
+            <BookmarkStatusSection jobId={job.job_id} />
+
             {/* Risk Assessment */}
             <section className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
               <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
