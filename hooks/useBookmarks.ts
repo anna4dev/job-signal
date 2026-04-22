@@ -1,78 +1,141 @@
 "use client";
 
-import { BookmarkItem } from "@/types/job";
+import { BookmarkItem, BookmarkStatus } from "@/types/job";
 import { useSyncExternalStore } from "react";
 
 const STORAGE_KEY = "job_bookmarks";
+const EVENT_KEY = "bookmark-change";
+
+const VALID_STATUSES: BookmarkStatus[] = [
+  "Saved",
+  "Applied",
+  "Interviewing",
+  "Offer",
+  "Rejected",
+];
 
 const EMPTY_CACHE: BookmarkItem[] = [];
 
 let cache: BookmarkItem[] = EMPTY_CACHE;
 let cacheRaw: string | null = null;
 
-function readFromStorage(): BookmarkItem[] {
+function deserialize(raw: string | null): BookmarkItem[] {
+  if (!raw) return EMPTY_CACHE;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return EMPTY_CACHE;
+    return parsed.reduce<BookmarkItem[]>((acc, item) => {
+      if (typeof item !== "object" || item === null) return acc;
+      const i = item as Record<string, unknown>;
+      if (typeof i.job_id !== "string") return acc;
 
-    if (raw === cacheRaw) {
-      return cache;
-    }
+      const entry: BookmarkItem = {
+        job_id: i.job_id,
+        created_at: typeof i.created_at === "number" ? i.created_at : Date.now(),
+      };
 
-    cacheRaw = raw;
-    cache = raw ? JSON.parse(raw) : EMPTY_CACHE;
+      // Preserve status only when it was previously written by an explicit user action.
+      // Old records without status stay as-is; UI is responsible for fallback display.
+      if (
+        typeof i.status === "string" &&
+        VALID_STATUSES.includes(i.status as BookmarkStatus)
+      ) {
+        entry.status = i.status as BookmarkStatus;
+        if (typeof i.status_updated_at === "number") {
+          entry.status_updated_at = i.status_updated_at;
+        }
+      }
 
-    return cache;
+      acc.push(entry);
+      return acc;
+    }, []);
   } catch {
     return EMPTY_CACHE;
   }
 }
 
+function readFromStorage(): BookmarkItem[] {
+  if (typeof window === "undefined") return EMPTY_CACHE;
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(STORAGE_KEY);
+    if (raw === cacheRaw) return cache;
+    cache = deserialize(raw);
+    cacheRaw = raw;
+    return cache;
+  } catch {
+    cache = EMPTY_CACHE;
+    cacheRaw = raw;
+    return cache;
+  }
+}
+
 function subscribe(callback: () => void) {
   const handler = () => {
-    readFromStorage();
+    cacheRaw = null; // invalidate cache so next read re-parses
     callback();
   };
-
   window.addEventListener("storage", handler);
-  window.addEventListener("bookmark-change", handler);
-
+  window.addEventListener(EVENT_KEY, handler);
   return () => {
     window.removeEventListener("storage", handler);
-    window.removeEventListener("bookmark-change", handler);
+    window.removeEventListener(EVENT_KEY, handler);
   };
 }
 
-function getSnapshot(): BookmarkItem[] {
-  return readFromStorage();
-}
-
-function getServerSnapshot(): BookmarkItem[] {
-  return EMPTY_CACHE;
+function writeToStorage(next: BookmarkItem[]): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const serialized = JSON.stringify(next);
+    localStorage.setItem(STORAGE_KEY, serialized);
+    cacheRaw = serialized;
+    cache = next;
+    window.dispatchEvent(new Event(EVENT_KEY));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function useBookmarks() {
   const bookmarks = useSyncExternalStore(
     subscribe,
-    getSnapshot,
-    getServerSnapshot,
+    readFromStorage,
+    () => EMPTY_CACHE,
   );
 
   const toggleBookmark = (jobId: string) => {
     const current = readFromStorage();
     const exists = current.some((item) => item.job_id === jobId);
-
+    // New bookmarks intentionally have no status field.
+    // Status is written only when the user explicitly picks one.
     const next = exists
       ? current.filter((item) => item.job_id !== jobId)
       : [{ job_id: jobId, created_at: Date.now() }, ...current];
+    writeToStorage(next);
+  };
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    window.dispatchEvent(new Event("bookmark-change"));
+  // Plain last-click-wins — no timestamp comparison.
+  // Local clocks are untrusted; whoever clicked last simply wins.
+  // status_updated_at is recorded only for UI display (sort order, "Updated at" label).
+  const setBookmarkStatus = (jobId: string, status: BookmarkStatus) => {
+    const current = readFromStorage();
+    let didChange = false;
+    const next = current.map((item) => {
+      if (item.job_id !== jobId) return item;
+      didChange = true;
+      return { ...item, status, status_updated_at: Date.now() };
+    });
+    if (didChange) writeToStorage(next);
   };
 
   const clearAll = () => {
+    if (typeof window === "undefined") return;
     localStorage.removeItem(STORAGE_KEY);
-    window.dispatchEvent(new Event("bookmark-change"));
+    cacheRaw = null;
+    cache = EMPTY_CACHE;
+    window.dispatchEvent(new Event(EVENT_KEY));
   };
 
-  return { bookmarks, toggleBookmark, clearAll };
+  return { bookmarks, toggleBookmark, setBookmarkStatus, clearAll };
 }

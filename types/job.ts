@@ -1,4 +1,20 @@
 export type ConfidenceLevel = "high" | "medium" | "low";
+export type BookmarkStatus =
+  | "Saved"
+  | "Applied"
+  | "Interviewing"
+  | "Offer"
+  | "Rejected";
+
+// Tailwind bg class for the status indicator dot shown on BookmarkButton.
+// Kept here so any component can read it without importing from a UI component.
+export const BOOKMARK_STATUS_DOT: Record<BookmarkStatus, string> = {
+  Saved: "bg-slate-400",
+  Applied: "bg-slate-400",
+  Interviewing: "bg-slate-400",
+  Offer: "bg-emerald-500",
+  Rejected: "bg-slate-300",
+};
 export type JobLevel =
   | "intern"
   | "junior"
@@ -62,11 +78,16 @@ export interface JobFullDetail extends JobWithCompany {
 
 export interface JobWithBookmark extends JobWithCompany {
   bookmarked_at: number | null;
+  // undefined = no explicit status set by user (not the same as 'Saved')
+  bookmark_status?: BookmarkStatus;
 }
 
 export interface BookmarkItem {
   job_id: string;
   created_at: number;
+  // Both fields are absent on old records — never written unless user explicitly acts.
+  status?: BookmarkStatus;
+  status_updated_at?: number;
 }
 
 export interface RawPostData {
