@@ -4,6 +4,7 @@ import { Metadata } from "next";
 import { JobFullDetail, RiskFlag, RecentNews, RawPostData } from "@/types/job";
 import JobDetailNav from "@/components/JobDetailNav";
 import BookmarkEntry from "@/components/BookmarkEntry";
+import ProfileEntry from "@/components/ProfileEntry";
 import BookmarkStatusSection from "@/components/BookmarkStatusSection";
 import Footer from "@/components/Footer";
 import JobSalaryCard from "@/components/JobOverrides/JobSalaryCard";
@@ -375,6 +376,7 @@ export default async function JobDetailPage({
           </div>
         </div>
 
+        <ProfileEntry />
         <BookmarkEntry />
         <Footer />
       </main>
