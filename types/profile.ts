@@ -135,6 +135,21 @@ export interface UnifiedSignals {
   implicit: ImplicitSignals; // preserved raw for debug / explain
 }
 
+// ── ProfileSuggestion — assist-fill V1 (saved searches → 2 fields max) ───────
+// RULE: Only `preferences.skills` and `hardConstraints.work.modes` may receive suggestions.
+// RULE: Capabilities are NEVER inferred from behavior (skills / seniority must be self-declared).
+// RULE: High-risk fields (salary / visa / oncall / seniority) have no suggestion path.
+// Pure derivation in lib/profileSuggestions.ts — no API, no side effects.
+export type SuggestionField =
+  | "preferences.skills"
+  | "hardConstraints.work.modes";
+
+export interface ProfileSuggestion {
+  field: SuggestionField;
+  values: string[]; // e.g. ['React', 'TypeScript'] or ['remote']
+  reason: "From your saved searches";
+}
+
 // ── FactorKey — explainability labels for Phase 2.3 / Phase 3 ────────────────
 // capability_skill_match vs preference_skill_match distinguish scoring source.
 export type FactorKey =

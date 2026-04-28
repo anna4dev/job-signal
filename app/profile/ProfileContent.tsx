@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useExplicitProfile } from "@/hooks/useExplicitProfile";
+import { useSavedSearches } from "@/hooks/useSavedSearches";
+import { getSuggestions } from "@/lib/profileSuggestions";
 import Switch from "@/components/Switch";
 import SegmentedControl from "@/components/SegmentedControl";
 import ChipMultiSelect from "@/components/ChipMultiSelect";
@@ -123,6 +125,35 @@ function CollapsibleSection({
   );
 }
 
+// ── Inline suggestion row (assist-fill V1, no banner / no regenerate) ────────
+
+function SuggestionRow({
+  values,
+  reason,
+  onApply,
+}: {
+  values: string[];
+  reason: string;
+  onApply: () => void;
+}) {
+  return (
+    <div className="mt-2 flex items-center gap-2 flex-wrap text-xs">
+      <span className="text-slate-500">Suggested:</span>
+      <span className="text-slate-800 font-medium truncate max-w-md">
+        {values.join(", ")}
+      </span>
+      <button
+        type="button"
+        onClick={onApply}
+        className="px-2 py-0.5 rounded-full text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-100 font-medium cursor-pointer transition-colors"
+      >
+        Apply
+      </button>
+      <span className="text-slate-400">{reason}</span>
+    </div>
+  );
+}
+
 // ── Weighted<ID> array helpers ────────────────────────────────────────────────
 
 function toTags(items: Weighted<ID>[]): string[] {
@@ -176,11 +207,25 @@ function rejItemCount(r: Rejections): number {
 
 export default function ProfileContent() {
   const { profile, updateProfile, resetProfile } = useExplicitProfile();
+  const { savedSearches } = useSavedSearches();
   const router = useRouter();
   const [savedFlash, setSavedFlash] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
+  );
+
+  // Pure derivation: recomputes whenever savedSearches or profile changes.
+  // Suggestion auto-disappears after Apply because profile changes invalidate it.
+  const suggestions = useMemo(
+    () => getSuggestions(savedSearches, profile),
+    [savedSearches, profile],
+  );
+  const skillsSuggestion = suggestions.find(
+    (s) => s.field === "preferences.skills",
+  );
+  const workModesSuggestion = suggestions.find(
+    (s) => s.field === "hardConstraints.work.modes",
   );
 
   // Collapsible sections: open if existing data is detected after hydration
@@ -190,6 +235,9 @@ export default function ProfileContent() {
   useEffect(() => {
     if (prefItemCount(profile.preferences) > 0) setShowPreferences(true);
     if (rejItemCount(profile.rejections) > 0) setShowRejections(true);
+    // Auto-expand Preferences so a skills suggestion is discoverable
+    // (the section it lives in is collapsed by default).
+    if (skillsSuggestion) setShowPreferences(true);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Salary local state — committed on blur to avoid per-keystroke saves
@@ -296,6 +344,32 @@ export default function ProfileContent() {
     }
   }
 
+  // ── Suggestion appliers (assist-fill V1) ──────────────────────────────────
+
+  function applySkillsSuggestion(values: string[]) {
+    const existing = profile.preferences.skills;
+    const existingLower = new Set(existing.map((s) => s.value.toLowerCase()));
+    const additions: Weighted<ID>[] = values
+      .filter((v) => !existingLower.has(v.toLowerCase()))
+      .map((v) => ({ value: v, weight: 1, source: "implicit" as const }));
+    if (additions.length === 0) return;
+    patchPref({ skills: [...existing, ...additions] });
+  }
+
+  function applyWorkModesSuggestion(values: string[]) {
+    const current = profile.hardConstraints.work.modes;
+    const additions = values.filter(
+      (v): v is WorkMode => !current.includes(v as WorkMode),
+    );
+    if (additions.length === 0) return;
+    patchHC({
+      work: {
+        ...profile.hardConstraints.work,
+        modes: [...current, ...additions],
+      },
+    });
+  }
+
   // ── Summary badges ────────────────────────────────────────────────────────
 
   const prefCount = prefItemCount(profile.preferences);
@@ -384,6 +458,15 @@ export default function ProfileContent() {
                 });
               }}
             />
+            {workModesSuggestion && (
+              <SuggestionRow
+                values={workModesSuggestion.values}
+                reason={workModesSuggestion.reason}
+                onApply={() =>
+                  applyWorkModesSuggestion(workModesSuggestion.values)
+                }
+              />
+            )}
           </div>
 
           <div>
@@ -505,6 +588,13 @@ export default function ProfileContent() {
               placeholder="Search or add tech (e.g. Go, Kubernetes, Rust)"
               fetchSuggestions={fetchSkills}
             />
+            {skillsSuggestion && (
+              <SuggestionRow
+                values={skillsSuggestion.values}
+                reason={skillsSuggestion.reason}
+                onApply={() => applySkillsSuggestion(skillsSuggestion.values)}
+              />
+            )}
           </div>
 
           <div>
