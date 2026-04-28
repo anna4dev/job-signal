@@ -152,7 +152,7 @@ _Goal: Make job discovery fast, reusable, and trustworthy._
 
 _Goal: Build stable matching inputs before introducing ranking complexity._
 
-- [ ] **2.1 Explicit Profile (Local-First)**
+- [x] **2.1 Explicit Profile (Local-First)**
 - `/profile` page for roles, stack, salary, remote/visa, locations.
 - Persist `explicitProfile` locally.
 
