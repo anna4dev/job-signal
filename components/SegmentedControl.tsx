@@ -24,12 +24,18 @@ export default function SegmentedControl<T extends string | number>({
   onSelect,
 }: SegmentedControlProps<T>) {
   return (
-    <div className="flex p-1 bg-slate-100 rounded-xl gap-0.5 overflow-x-auto">
+    <div
+      role="radiogroup"
+      className="flex p-1 bg-slate-100 rounded-xl gap-0.5 overflow-x-auto"
+    >
       {options.map((opt) => {
         const active = selected === opt.value;
         return (
           <button
             key={String(opt.value)}
+            type="button"
+            role="radio"
+            aria-checked={active}
             onClick={() => onSelect(opt.value)}
             className={`flex-1 min-w-0 px-2.5 py-1.5 rounded-lg text-[13px] font-medium transition-all whitespace-nowrap cursor-pointer ${
               active

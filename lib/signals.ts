@@ -8,6 +8,7 @@ import type {
   ExplicitProfile,
 } from "@/types/profile";
 import type { BookmarkItem } from "@/types/job";
+import type { SavedSearchItem } from "@/hooks/useSavedSearches";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -15,6 +16,14 @@ import type { BookmarkItem } from "@/types/job";
 const ALPHA = 0.3;
 
 const DEFAULT_HALF_LIFE_DAYS = 30;
+
+// ── ID canonicalization ──────────────────────────────────────────────────────
+// Free-text inputs admit casing/whitespace variants ("React" vs "react"). All
+// merge / rejection-conflict logic must compare on the canonical form, otherwise
+// soft rejections silently fail to remove preferred skills.
+function canonicalId(v: string): string {
+  return v.trim().toLowerCase();
+}
 
 // ── 1. applyDecay ─────────────────────────────────────────────────────────────
 // Exponential time decay: weight halves every halfLifeDays days.
@@ -66,24 +75,25 @@ export function mergePreferences(
     implicitList: Weighted<ID>[] | undefined,
     rejectedIds: Set<string>,
   ): Weighted<ID>[] {
-    // Step 1: groupBy(value) — use ID as unique key
+    // Step 1: groupBy(canonicalId(value)) — use canonical key, preserve first-seen value
     const map = new Map<string, Weighted<ID>>();
 
     for (const item of explicitList) {
-      map.set(item.value, { ...item, source: "explicit" });
+      map.set(canonicalId(item.value), { ...item, source: "explicit" });
     }
 
     for (const item of implicitList ?? []) {
-      const existing = map.get(item.value);
+      const key = canonicalId(item.value);
+      const existing = map.get(key);
       if (existing) {
         // explicit item exists: small augmentation, capped at 1
-        map.set(item.value, {
+        map.set(key, {
           ...existing,
           weight: Math.min(1, existing.weight + ALPHA * item.weight),
         });
       } else {
         // new item from implicit: downweighted introduction
-        map.set(item.value, {
+        map.set(key, {
           value: item.value,
           weight: ALPHA * item.weight,
           source: "implicit",
@@ -92,8 +102,10 @@ export function mergePreferences(
     }
 
     // Step 2: remove items that appear in rejections (conflict priority)
+    // Compare via canonical IDs so "React" preference + "react" soft rejection
+    // resolve to the same key.
     const merged = Array.from(map.values()).filter(
-      (item) => !rejectedIds.has(item.value),
+      (item) => !rejectedIds.has(canonicalId(item.value)),
     );
 
     // Step 3: normalize per-dimension
@@ -101,7 +113,7 @@ export function mergePreferences(
   }
 
   const rejectedSkillIds = new Set(
-    (rejections.soft.skills ?? []).map((s) => s.value),
+    (rejections.soft.skills ?? []).map((s) => canonicalId(s.value)),
   );
 
   return {
@@ -118,17 +130,55 @@ export function mergePreferences(
 }
 
 // ── 4. extractImplicitSignals ─────────────────────────────────────────────────
-// Derives ImplicitSignals from Phase 1 data (bookmarks + saved searches).
-// Frequency of bookmarked job attributes → normalized weights.
-export function extractImplicitSignals(bookmarks: BookmarkItem[]): ImplicitSignals {
+// Derives ImplicitSignals from Phase 1 data.
+//   - bookmarks → behaviorMetrics (count, applyRate). Job-attribute extraction
+//     (skills/industries) requires job detail joins and is deferred to Phase 2.2+.
+//   - savedSearches → inferredPreferences.skills (frequency of `filters.stack`,
+//     normalized to 0..1).
+//
+// Returns inferredPreferences.skills only when ≥1 stack value exists. Roles /
+// industries / etc. are intentionally not inferred (saved-search filters do
+// not carry that data, and capabilities are never inferred).
+export function extractImplicitSignals(
+  bookmarks: BookmarkItem[],
+  savedSearches: SavedSearchItem[],
+): ImplicitSignals {
   const bookmarkCount = bookmarks.length;
   const appliedCount = bookmarks.filter(
     (b) => b.status === "Applied" || b.status === "Interviewing" || b.status === "Offer",
   ).length;
   const applyRate = bookmarkCount > 0 ? appliedCount / bookmarkCount : 0;
 
+  // Frequency-weighted skill signals from saved-search stack filters.
+  // Map keyed by canonical id; preserves first-seen casing as the value.
+  const skillCounts = new Map<string, { value: string; count: number }>();
+  for (const s of savedSearches) {
+    const stack = s.filters.stack;
+    if (!stack) continue;
+    for (const raw of stack.split(",")) {
+      const v = raw.trim();
+      if (!v) continue;
+      const key = canonicalId(v);
+      const entry = skillCounts.get(key);
+      if (entry) entry.count++;
+      else skillCounts.set(key, { value: v, count: 1 });
+    }
+  }
+
+  let skills: Weighted<ID>[] | undefined;
+  if (skillCounts.size > 0) {
+    const maxCount = Math.max(
+      ...Array.from(skillCounts.values()).map((e) => e.count),
+    );
+    skills = Array.from(skillCounts.values()).map((e) => ({
+      value: e.value,
+      weight: e.count / maxCount,
+      source: "implicit" as const,
+    }));
+  }
+
   return {
-    inferredPreferences: {},
+    inferredPreferences: skills ? { skills } : {},
     behaviorMetrics: { bookmarkCount, applyRate },
     decay: {
       halfLifeDays: DEFAULT_HALF_LIFE_DAYS,
@@ -145,9 +195,10 @@ export function extractImplicitSignals(bookmarks: BookmarkItem[]): ImplicitSigna
 export function computeUnifiedSignals(
   explicit: ExplicitProfile,
   bookmarks: BookmarkItem[],
+  savedSearches: SavedSearchItem[],
 ): UnifiedSignals {
   const now = Date.now();
-  const rawImplicit = extractImplicitSignals(bookmarks);
+  const rawImplicit = extractImplicitSignals(bookmarks, savedSearches);
   const decayedImplicit = applyDecay(rawImplicit, now);
 
   const mergedPreferences = mergePreferences(

@@ -15,6 +15,7 @@ interface SwitchProps {
 export default function Switch({ checked, onChange, label }: SwitchProps) {
   return (
     <button
+      type="button"
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}

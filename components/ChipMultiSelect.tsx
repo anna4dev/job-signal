@@ -27,6 +27,8 @@ export default function ChipMultiSelect<T extends string>({
         return (
           <button
             key={opt.value}
+            type="button"
+            aria-pressed={active}
             onClick={() => onToggle(opt.value)}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors cursor-pointer ${
               active
@@ -37,6 +39,7 @@ export default function ChipMultiSelect<T extends string>({
             {active && (
               <svg
                 className="w-3 h-3 shrink-0"
+                aria-hidden="true"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"

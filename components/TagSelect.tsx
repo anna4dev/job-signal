@@ -51,6 +51,10 @@ export default function TagSelect({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Per-instance cache: prevents duplicate requests while typing.
   const localCache = useRef(new Map<string, string[]>());
+  // Generation counter: only the latest in-flight request may write state.
+  // Without this, a slower older response can win the race and replace results
+  // for the latest query.
+  const requestIdRef = useRef(0);
 
   // Close on click outside
   useEffect(() => {
@@ -77,9 +81,11 @@ export default function TagSelect({
 
     clearTimeout(debounceRef.current);
     setLoading(true);
+    const myId = ++requestIdRef.current;
     debounceRef.current = setTimeout(async () => {
       const key = q.toLowerCase();
       if (localCache.current.has(key)) {
+        if (myId !== requestIdRef.current) return;
         const filtered = (localCache.current.get(key) ?? []).filter(
           (s) => !tags.some((t) => t.toLowerCase() === s.toLowerCase()),
         );
@@ -90,6 +96,7 @@ export default function TagSelect({
       }
       try {
         const data = await fetchSuggestions(q);
+        if (myId !== requestIdRef.current) return; // stale: a newer query has superseded this one
         localCache.current.set(key, data);
         const filtered = data.filter(
           (s) => !tags.some((t) => t.toLowerCase() === s.toLowerCase()),
@@ -97,9 +104,10 @@ export default function TagSelect({
         setSuggestions(filtered);
         setActiveIdx(-1);
       } catch {
+        if (myId !== requestIdRef.current) return;
         setSuggestions([]);
       } finally {
-        setLoading(false);
+        if (myId === requestIdRef.current) setLoading(false);
       }
     }, 300);
 

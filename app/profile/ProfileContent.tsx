@@ -48,6 +48,12 @@ const fetchIndustries = makeProfileFetch("industries");
 const fetchRoles = makeProfileFetch("roles");
 const fetchLocations = makeProfileFetch("locations");
 
+// Whitelist for runtime validation of WorkMode values from suggestions / external sources.
+// Keeps applyWorkModesSuggestion from persisting arbitrary strings as WorkMode.
+const WORK_MODE_VALUES: ReadonlySet<WorkMode> = new Set(
+  WORK_MODE_OPTIONS.map((o) => o.value),
+);
+
 // ── Profile-specific layout primitives (not shared, intentionally local) ─────
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
@@ -89,6 +95,8 @@ function CollapsibleSection({
   return (
     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
       <button
+        type="button"
+        aria-expanded={open}
         onClick={onToggle}
         className="w-full flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-slate-50 transition-colors"
       >
@@ -154,6 +162,108 @@ function SuggestionRow({
   );
 }
 
+// ── Salary editor (keyed child — owns its own draft state) ──────────────────
+// Lifting the salary inputs into a child eliminates the parent's "useState +
+// sync useEffect" derived-state pattern. The child initializes from props once
+// (lazy), then only commits on blur. The parent uses `key={resetCounter}` to
+// force a fresh mount on profile reset; everyday saves leave the key intact, so
+// typing focus is never lost.
+
+interface SalaryEditorProps {
+  defaultMin: number | undefined;
+  defaultMax: number | undefined;
+  defaultCurrency: Currency;
+  onCommit: (min: number | undefined, max: number | undefined, currency: Currency) => void;
+  onClear: () => void;
+}
+
+function SalaryEditor({
+  defaultMin,
+  defaultMax,
+  defaultCurrency,
+  onCommit,
+  onClear,
+}: SalaryEditorProps) {
+  const [min, setMin] = useState(() => String(defaultMin ?? ""));
+  const [max, setMax] = useState(() => String(defaultMax ?? ""));
+  const [currency, setCurrency] = useState<Currency>(defaultCurrency);
+  const [error, setError] = useState<string | null>(null);
+
+  function validate(minStr: string, maxStr: string): string | null {
+    const n = minStr ? Number(minStr) : undefined;
+    const x = maxStr ? Number(maxStr) : undefined;
+    if (n !== undefined && (isNaN(n) || n < 0)) return "Min must be a positive number";
+    if (x !== undefined && (isNaN(x) || x < 0)) return "Max must be a positive number";
+    if (n !== undefined && x !== undefined && x < n) return "Max must be ≥ min";
+    return null;
+  }
+
+  function commit(minStr: string, maxStr: string, c: Currency) {
+    const err = validate(minStr, maxStr);
+    setError(err);
+    if (err) return;
+    const parsedMin = minStr ? Number(minStr) : undefined;
+    const parsedMax = maxStr ? Number(maxStr) : undefined;
+    if (parsedMin !== undefined || parsedMax !== undefined) {
+      onCommit(parsedMin, parsedMax, c);
+    } else {
+      onClear();
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex gap-2 items-start flex-wrap sm:flex-nowrap">
+        <select
+          value={currency}
+          onChange={(e) => {
+            const c = e.target.value as Currency;
+            setCurrency(c);
+            commit(min, max, c);
+          }}
+          className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 cursor-pointer shrink-0"
+        >
+          {CURRENCY_OPTIONS.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+        <div className="flex-1 min-w-0">
+          <input
+            type="number"
+            min={0}
+            value={min}
+            onChange={(e) => {
+              setMin(e.target.value);
+              setError(null);
+            }}
+            onBlur={() => commit(min, max, currency)}
+            placeholder="Min (e.g. 120000)"
+            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-slate-50 placeholder:text-slate-400"
+          />
+        </div>
+        <span className="text-slate-400 text-sm self-center shrink-0">–</span>
+        <div className="flex-1 min-w-0">
+          <input
+            type="number"
+            min={0}
+            value={max}
+            onChange={(e) => {
+              setMax(e.target.value);
+              setError(null);
+            }}
+            onBlur={() => commit(min, max, currency)}
+            placeholder="Max (optional)"
+            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-slate-50 placeholder:text-slate-400"
+          />
+        </div>
+      </div>
+      {error && <p className="mt-1.5 text-xs text-rose-600">{error}</p>}
+    </div>
+  );
+}
+
 // ── Weighted<ID> array helpers ────────────────────────────────────────────────
 
 function toTags(items: Weighted<ID>[]): string[] {
@@ -210,10 +320,15 @@ export default function ProfileContent() {
   const { savedSearches } = useSavedSearches();
   const router = useRouter();
   const [savedFlash, setSavedFlash] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  // Bumped on intentional reset to remount keyed child editors (e.g. SalaryEditor)
+  // so they pick up cleared defaults; everyday saves leave it alone.
+  const [resetCounter, setResetCounter] = useState(0);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
+  const cancelBtnRef = useRef<HTMLButtonElement>(null);
 
   // Pure derivation: recomputes whenever savedSearches or profile changes.
   // Suggestion auto-disappears after Apply because profile changes invalidate it.
@@ -228,46 +343,54 @@ export default function ProfileContent() {
     (s) => s.field === "hardConstraints.work.modes",
   );
 
-  // Collapsible sections: open if existing data is detected after hydration
-  const [showPreferences, setShowPreferences] = useState(false);
-  const [showRejections, setShowRejections] = useState(false);
+  // Collapsible sections: derived from data + suggestion + user override.
+  // No mount-only effect needed — the override takes precedence once the user
+  // toggles, otherwise default-open when the section already has data.
+  const [prefsOverride, setPrefsOverride] = useState<boolean | null>(null);
+  const [rejOverride, setRejOverride] = useState<boolean | null>(null);
 
+  const showPreferences =
+    prefsOverride ?? (prefItemCount(profile.preferences) > 0 || !!skillsSuggestion);
+  const showRejections =
+    rejOverride ?? rejItemCount(profile.rejections) > 0;
+
+  // Reset modal: focus management + ESC dismissal.
   useEffect(() => {
-    if (prefItemCount(profile.preferences) > 0) setShowPreferences(true);
-    if (rejItemCount(profile.rejections) > 0) setShowRejections(true);
-    // Auto-expand Preferences so a skills suggestion is discoverable
-    // (the section it lives in is collapsed by default).
-    if (skillsSuggestion) setShowPreferences(true);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Salary local state — committed on blur to avoid per-keystroke saves
-  const [salaryMin, setSalaryMin] = useState(
-    String(profile.preferences.salary?.min ?? ""),
-  );
-  const [salaryMax, setSalaryMax] = useState(
-    String(profile.preferences.salary?.max ?? ""),
-  );
-  const [salaryError, setSalaryError] = useState<string | null>(null);
-  const salaryCurrency: Currency =
-    profile.preferences.salary?.currency ?? "USD";
-
-  useEffect(() => {
-    setSalaryMin(String(profile.preferences.salary?.min ?? ""));
-    setSalaryMax(String(profile.preferences.salary?.max ?? ""));
-    setSalaryError(null);
-  }, [profile.preferences.salary]);
+    if (!showResetConfirm) return;
+    cancelBtnRef.current?.focus();
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowResetConfirm(false);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [showResetConfirm]);
 
   // ── Save helper ──────────────────────────────────────────────────────────
-
+  // Surfaces storage failures (private mode / quota) so users don't see a false
+  // "Saved" confirmation when localStorage rejected the write.
   const save = useCallback(
     (next: ExplicitProfile) => {
-      updateProfile(next);
+      const ok = updateProfile(next);
       clearTimeout(flashTimer.current);
-      setSavedFlash(true);
-      flashTimer.current = setTimeout(() => setSavedFlash(false), 1500);
+      if (ok) {
+        setSaveError(null);
+        setSavedFlash(true);
+        flashTimer.current = setTimeout(() => setSavedFlash(false), 1500);
+      } else {
+        setSavedFlash(false);
+        setSaveError("Couldn't save — storage may be unavailable.");
+      }
     },
     [updateProfile],
   );
+
+  function handleResetConfirmed() {
+    resetProfile();
+    setResetCounter((c) => c + 1);
+    setPrefsOverride(null);
+    setRejOverride(null);
+    setShowResetConfirm(false);
+  }
 
   // ── Section patchers ──────────────────────────────────────────────────────
 
@@ -320,30 +443,6 @@ export default function ProfileContent() {
     });
   }
 
-  // ── Salary ────────────────────────────────────────────────────────────────
-
-  function validateSalary(min: string, max: string): string | null {
-    const n = min ? Number(min) : undefined;
-    const x = max ? Number(max) : undefined;
-    if (n !== undefined && (isNaN(n) || n < 0)) return "Min must be a positive number";
-    if (x !== undefined && (isNaN(x) || x < 0)) return "Max must be a positive number";
-    if (n !== undefined && x !== undefined && x < n) return "Max must be ≥ min";
-    return null;
-  }
-
-  function commitSalary(min: string, max: string, currency: Currency) {
-    const err = validateSalary(min, max);
-    setSalaryError(err);
-    if (err) return;
-    const parsedMin = min ? Number(min) : undefined;
-    const parsedMax = max ? Number(max) : undefined;
-    if (parsedMin !== undefined || parsedMax !== undefined) {
-      patchPref({ salary: { min: parsedMin, max: parsedMax, currency, weight: 1 } });
-    } else {
-      patchPref({ salary: undefined });
-    }
-  }
-
   // ── Suggestion appliers (assist-fill V1) ──────────────────────────────────
 
   function applySkillsSuggestion(values: string[]) {
@@ -358,9 +457,15 @@ export default function ProfileContent() {
 
   function applyWorkModesSuggestion(values: string[]) {
     const current = profile.hardConstraints.work.modes;
-    const additions = values.filter(
-      (v): v is WorkMode => !current.includes(v as WorkMode),
-    );
+    // Validate each value against the WorkMode whitelist before persisting.
+    // Without this, any string from a suggestion can pass through as a WorkMode.
+    const additions: WorkMode[] = [];
+    for (const v of values) {
+      const candidate = v as WorkMode;
+      if (WORK_MODE_VALUES.has(candidate) && !current.includes(candidate)) {
+        additions.push(candidate);
+      }
+    }
     if (additions.length === 0) return;
     patchHC({
       work: {
@@ -381,6 +486,7 @@ export default function ProfileContent() {
       <header className="bg-white border-b border-slate-200 py-4 sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-4 flex justify-between items-center">
           <button
+            type="button"
             onClick={() => router.back()}
             className="text-sm font-medium text-slate-600 hover:text-blue-600 flex items-center gap-1 cursor-pointer"
           >
@@ -395,12 +501,22 @@ export default function ProfileContent() {
           </span>
 
           <div className="flex items-center gap-3">
-            {savedFlash && (
-              <span className="text-[11px] font-medium text-emerald-600 animate-in fade-in duration-150">
-                Saved
+            {saveError ? (
+              <span
+                role="alert"
+                className="text-[11px] font-medium text-rose-600"
+              >
+                {saveError}
               </span>
+            ) : (
+              savedFlash && (
+                <span className="text-[11px] font-medium text-emerald-600 animate-in fade-in duration-150">
+                  Saved
+                </span>
+              )
             )}
             <button
+              type="button"
               onClick={() => setShowResetConfirm(true)}
               className="text-sm font-medium text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
             >
@@ -412,21 +528,38 @@ export default function ProfileContent() {
 
       {/* Reset confirm modal */}
       {showResetConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reset-dialog-title"
+          aria-describedby="reset-dialog-desc"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+        >
           <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
-            <h3 className="text-lg font-bold text-slate-900">Reset profile?</h3>
-            <p className="mt-2 text-sm text-slate-500 leading-relaxed">
+            <h3
+              id="reset-dialog-title"
+              className="text-lg font-bold text-slate-900"
+            >
+              Reset profile?
+            </h3>
+            <p
+              id="reset-dialog-desc"
+              className="mt-2 text-sm text-slate-500 leading-relaxed"
+            >
               All profile data will be cleared from this device. This cannot be undone.
             </p>
             <div className="mt-6 flex gap-3">
               <button
+                ref={cancelBtnRef}
+                type="button"
                 onClick={() => setShowResetConfirm(false)}
                 className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
-                onClick={() => { resetProfile(); setShowResetConfirm(false); }}
+                type="button"
+                onClick={handleResetConfirmed}
                 className="flex-1 px-4 py-2 text-sm font-medium text-white bg-rose-600 rounded-lg hover:bg-rose-700 transition-colors cursor-pointer"
               >
                 Reset
@@ -566,7 +699,7 @@ export default function ProfileContent() {
           title="Preferences"
           badge={prefCount > 0 ? `${prefCount} set` : undefined}
           open={showPreferences}
-          onToggle={() => setShowPreferences((v) => !v)}
+          onToggle={() => setPrefsOverride(!showPreferences)}
         >
           <div>
             <FieldLabel>Target roles</FieldLabel>
@@ -640,43 +773,16 @@ export default function ProfileContent() {
 
           <div>
             <FieldLabel>Salary range</FieldLabel>
-            <div className="flex gap-2 items-start flex-wrap sm:flex-nowrap">
-              <select
-                value={salaryCurrency}
-                onChange={(e) => commitSalary(salaryMin, salaryMax, e.target.value as Currency)}
-                className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 cursor-pointer shrink-0"
-              >
-                {CURRENCY_OPTIONS.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-              <div className="flex-1 min-w-0">
-                <input
-                  type="number"
-                  min={0}
-                  value={salaryMin}
-                  onChange={(e) => { setSalaryMin(e.target.value); setSalaryError(null); }}
-                  onBlur={() => commitSalary(salaryMin, salaryMax, salaryCurrency)}
-                  placeholder="Min (e.g. 120000)"
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-slate-50 placeholder:text-slate-400"
-                />
-              </div>
-              <span className="text-slate-400 text-sm self-center shrink-0">–</span>
-              <div className="flex-1 min-w-0">
-                <input
-                  type="number"
-                  min={0}
-                  value={salaryMax}
-                  onChange={(e) => { setSalaryMax(e.target.value); setSalaryError(null); }}
-                  onBlur={() => commitSalary(salaryMin, salaryMax, salaryCurrency)}
-                  placeholder="Max (optional)"
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-slate-50 placeholder:text-slate-400"
-                />
-              </div>
-            </div>
-            {salaryError && (
-              <p className="mt-1.5 text-xs text-rose-600">{salaryError}</p>
-            )}
+            <SalaryEditor
+              key={resetCounter}
+              defaultMin={profile.preferences.salary?.min}
+              defaultMax={profile.preferences.salary?.max}
+              defaultCurrency={profile.preferences.salary?.currency ?? "USD"}
+              onCommit={(min, max, currency) =>
+                patchPref({ salary: { min, max, currency, weight: 1 } })
+              }
+              onClear={() => patchPref({ salary: undefined })}
+            />
           </div>
         </CollapsibleSection>
 
@@ -685,7 +791,7 @@ export default function ProfileContent() {
           title="No thanks"
           badge={rejCount > 0 ? `${rejCount} set` : undefined}
           open={showRejections}
-          onToggle={() => setShowRejections((v) => !v)}
+          onToggle={() => setRejOverride(!showRejections)}
         >
           <div>
             <FieldLabel>No on-call</FieldLabel>

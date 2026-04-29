@@ -3,10 +3,25 @@ import { NextRequest } from "next/server";
 
 type SuggestionType = "skills" | "industries" | "roles" | "locations";
 
-// Simple in-process cache: avoids repeated DB hits for the same query within a request lifecycle.
-// Key: "type:query", Value: string[]
+const ALLOWED_TYPES: ReadonlySet<SuggestionType> = new Set([
+  "skills",
+  "industries",
+  "roles",
+  "locations",
+]);
+const MAX_QUERY_LENGTH = 64;
+
+function isSuggestionType(v: unknown): v is SuggestionType {
+  return typeof v === "string" && ALLOWED_TYPES.has(v as SuggestionType);
+}
+
+// Simple in-process cache. Bounded at MAX_CACHE_ENTRIES — without an upper bound,
+// high-cardinality requests (each new query string seeds a new entry) can grow
+// memory indefinitely since entries only evict on cache hits past TTL.
+// FIFO eviction via Map insertion order is sufficient for this read-mostly cache.
 const cache = new Map<string, { data: string[]; at: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_CACHE_ENTRIES = 500;
 
 function getCached(key: string): string[] | null {
   const entry = cache.get(key);
@@ -19,16 +34,26 @@ function getCached(key: string): string[] | null {
 }
 
 function setCached(key: string, data: string[]) {
+  if (cache.size >= MAX_CACHE_ENTRIES) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey !== undefined) cache.delete(oldestKey);
+  }
   cache.set(key, { data, at: Date.now() });
 }
 
 export async function GET(req: NextRequest) {
-  const type = req.nextUrl.searchParams.get("type") as SuggestionType | null;
+  const rawType = req.nextUrl.searchParams.get("type");
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
 
-  if (!type || !q || q.length < 1) {
+  if (
+    !isSuggestionType(rawType) ||
+    !q ||
+    q.length < 1 ||
+    q.length > MAX_QUERY_LENGTH
+  ) {
     return Response.json([]);
   }
+  const type: SuggestionType = rawType;
 
   const cacheKey = `${type}:${q.toLowerCase()}`;
   const cached = getCached(cacheKey);

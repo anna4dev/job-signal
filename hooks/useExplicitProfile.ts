@@ -52,16 +52,17 @@ export function useExplicitProfile() {
     () => SERVER_SNAPSHOT,
   );
 
-  function updateProfile(next: ExplicitProfile) {
+  // Returns false when localStorage is unavailable. Callers must surface failures.
+  function updateProfile(next: ExplicitProfile): boolean {
     cache = next;
     cacheRaw = null; // force re-read on next subscription tick
-    writeExplicitProfile(next);
+    return writeExplicitProfile(next);
   }
 
-  function resetProfile() {
+  function resetProfile(): boolean {
     cache = null;
     cacheRaw = null;
-    clearExplicitProfile();
+    return clearExplicitProfile();
   }
 
   return { profile, updateProfile, resetProfile };
