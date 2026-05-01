@@ -41,6 +41,29 @@ function setCached(key: string, data: string[]) {
   cache.set(key, { data, at: Date.now() });
 }
 
+// Trim + case-insensitive dedupe for scalar suggestion rows.
+// SQL DISTINCT only de-dupes by exact value, so trimming after the query can
+// re-introduce duplicates ("FinTech" / "fintech" / " Fintech " all collapse to
+// the same key here). First-seen casing is preserved.
+function normalizeRows(
+  rows: ArrayLike<Record<string, unknown>>,
+  limit: number,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const raw = rows[i].val;
+    const v = typeof raw === "string" ? raw.trim() : "";
+    if (!v) continue;
+    const key = v.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(v);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 export async function GET(req: NextRequest) {
   const rawType = req.nextUrl.searchParams.get("type");
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
@@ -105,12 +128,10 @@ export async function GET(req: NextRequest) {
               WHERE LOWER(industry) LIKE LOWER(?)
                 AND industry IS NOT NULL AND industry != ''
               ORDER BY industry
-              LIMIT 10`,
+              LIMIT 20`,
         args: [pattern],
       });
-      results = res.rows
-        .map((r) => (typeof r.val === "string" ? r.val.trim() : null))
-        .filter((v): v is string => !!v);
+      results = normalizeRows(res.rows, 10);
     } else if (type === "roles") {
       const res = await db.execute({
         sql: `SELECT DISTINCT role_title as val
@@ -118,12 +139,10 @@ export async function GET(req: NextRequest) {
               WHERE LOWER(role_title) LIKE LOWER(?)
                 AND role_title IS NOT NULL AND role_title != ''
               ORDER BY role_title
-              LIMIT 10`,
+              LIMIT 20`,
         args: [pattern],
       });
-      results = res.rows
-        .map((r) => (typeof r.val === "string" ? r.val.trim() : null))
-        .filter((v): v is string => !!v);
+      results = normalizeRows(res.rows, 10);
     } else if (type === "locations") {
       // Countries from the job board — already real/normalised values from postings.
       const res = await db.execute({
@@ -132,12 +151,10 @@ export async function GET(req: NextRequest) {
               WHERE LOWER(location_country) LIKE LOWER(?)
                 AND location_country IS NOT NULL AND location_country != ''
               ORDER BY location_country
-              LIMIT 10`,
+              LIMIT 20`,
         args: [pattern],
       });
-      results = res.rows
-        .map((r) => (typeof r.val === "string" ? r.val.trim() : null))
-        .filter((v): v is string => !!v);
+      results = normalizeRows(res.rows, 10);
     }
 
     setCached(cacheKey, results);

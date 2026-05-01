@@ -28,12 +28,32 @@ function canonicalId(v: string): string {
 // ── 1. applyDecay ─────────────────────────────────────────────────────────────
 // Exponential time decay: weight halves every halfLifeDays days.
 // Prevents stale behavior from permanently biasing recommendations.
+//
+// Hardening (factor must always land in [0, 1]):
+//   - halfLifeDays <= 0          → invalid config, treat as no-decay (factor=1)
+//   - now < lastUpdatedAt        → clock skew / future signal, clamp ageDays to 0
+//   - non-finite Math.pow result → fallback to factor=1 (defense in depth)
+function computeDecayFactor(
+  now: number,
+  lastUpdatedAt: number,
+  halfLifeDays: number,
+): number {
+  if (!Number.isFinite(halfLifeDays) || halfLifeDays <= 0) return 1;
+  const ageDays = Math.max(0, (now - lastUpdatedAt) / 86_400_000);
+  const factor = Math.pow(0.5, ageDays / halfLifeDays);
+  if (!Number.isFinite(factor)) return 1;
+  return Math.min(1, Math.max(0, factor));
+}
+
 export function applyDecay(
   signals: ImplicitSignals,
   now: number,
 ): ImplicitSignals {
-  const ageDays = (now - signals.lastUpdatedAt) / 86_400_000;
-  const factor = Math.pow(0.5, ageDays / signals.decay.halfLifeDays);
+  const factor = computeDecayFactor(
+    now,
+    signals.lastUpdatedAt,
+    signals.decay.halfLifeDays,
+  );
 
   function decayList<T>(items: Weighted<T>[] | undefined): Weighted<T>[] | undefined {
     if (!items) return undefined;
