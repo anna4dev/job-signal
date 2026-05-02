@@ -4,6 +4,7 @@ import FilterBar from "@/components/FilterBar";
 import { JobWithCompany } from "@/types/job";
 import Pagination from "@/components/Pagination";
 import BookmarkEntry from "@/components/BookmarkEntry";
+import ProfileEntry from "@/components/ProfileEntry";
 import Footer from "@/components/Footer";
 import { unstable_cache } from "next/cache";
 
@@ -247,6 +248,7 @@ export default async function JobsPage({
             </div>
           )}
         </main>
+        <ProfileEntry />
         <BookmarkEntry />
       </div>
       <Footer />
