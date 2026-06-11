@@ -17,9 +17,6 @@ export const metadata: Metadata = {
   title: "JobSignal",
   description:
     "Structured, searchable interface for Hacker News Who is Hiring jobs",
-  alternates: {
-    canonical: "/",
-  },
 };
 
 export default function RootLayout({

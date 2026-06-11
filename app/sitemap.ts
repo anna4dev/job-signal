@@ -4,9 +4,14 @@ import { db } from "@/lib/db";
 export const revalidate = 3600; // cache
 
 const toDate = (value: unknown): Date => {
-  if (!value) return new Date();
-  const d = new Date(value as string);
-  return Number.isNaN(d.getTime()) ? new Date() : d;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? new Date() : value;
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? new Date() : d;
+  }
+  return new Date();
 };
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

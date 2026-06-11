@@ -113,24 +113,68 @@ export default async function JobDetailPage({
   };
 
   // 2. prepare JSON-LD
+  const postedDate = new Date(job.post_at as string);
+  // HN "Who's Hiring" threads are monthly; keep listings valid for ~60 days so
+  // Google does not flag them as expired while staying reasonably fresh.
+  const validThrough = new Date(postedDate);
+  validThrough.setDate(validThrough.getDate() + 60);
+
+  // No dedicated employment-type column exists; interns map to INTERN, the rest
+  // default to FULL_TIME (the overwhelming majority of HN Who's Hiring posts).
+  const employmentType = job.level === "intern" ? "INTERN" : "FULL_TIME";
+
+  const jobDescription =
+    job.raw_text?.trim() ||
+    [
+      responsibilities.length
+        ? `Responsibilities: ${responsibilities.join("; ")}.`
+        : "",
+      requiredSkills.length
+        ? `Required skills: ${requiredSkills.join(", ")}.`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" ") ||
+    `${job.role_title} at ${job.company_name}.`;
+
+  const hasPhysicalLocation = Boolean(
+    job.location_city || job.location_country,
+  );
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "JobPosting",
     title: job.role_title,
-    description: job.level,
-    datePosted: new Date(job.post_at as string).toISOString(),
+    description: jobDescription,
+    datePosted: postedDate.toISOString(),
+    validThrough: validThrough.toISOString(),
+    employmentType,
     hiringOrganization: {
       "@type": "Organization",
       name: job.company_name,
       sameAs: sourceLinks.website, // company website
     },
-    jobLocation: {
-      "@type": "Place",
-      address: {
-        "@type": "PostalAddress",
-        addressLocality: displayLocation(),
-      },
-    },
+    ...(hasPhysicalLocation
+      ? {
+          jobLocation: {
+            "@type": "Place",
+            address: {
+              "@type": "PostalAddress",
+              addressLocality: job.location_city || undefined,
+              addressCountry: job.location_country || undefined,
+            },
+          },
+        }
+      : {}),
+    ...(job.location_remote === 1
+      ? {
+          jobLocationType: "TELECOMMUTE",
+          applicantLocationRequirements: {
+            "@type": "Country",
+            name: job.location_country || "Anywhere",
+          },
+        }
+      : {}),
     baseSalary: job.salary_min
       ? {
           "@type": "MonetaryAmount",
