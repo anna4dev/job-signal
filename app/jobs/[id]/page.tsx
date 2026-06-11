@@ -16,7 +16,7 @@ export const revalidate = 300;
 export async function generateMetadata({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const id = (await params).id;
   // get detail
@@ -25,10 +25,15 @@ export async function generateMetadata({
     args: [id],
   });
   const job = result.rows[0];
-  if (!job) return { title: "Job Not Found" };
+  if (!job) {
+    return { title: "Job Not Found", robots: { index: false, follow: false } };
+  }
   return {
     title: `${job.role_title} at ${job.company_name} | HN Who's Hiring`,
     description: `Check out this ${job.role_title} position at ${job.company_name} from the latest Hacker News Who's Hiring thread.`,
+    alternates: {
+      canonical: `/jobs/${id}`,
+    },
   };
 }
 

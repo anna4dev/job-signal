@@ -15,6 +15,9 @@ export const metadata = {
   title: "Hacker News Who's Hiring | Structured & Filterable Job Board",
   description:
     "Browse the latest Hacker News Who's Hiring thread with powerful filters. Search by tech stack, industry, and company size in a clean, structured interface.",
+  alternates: {
+    canonical: "/",
+  },
   keywords: [
     "Hacker News",
     "Who's Hiring",

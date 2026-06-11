@@ -13,9 +13,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://jobsignal.dev"),
   title: "JobSignal",
   description:
     "Structured, searchable interface for Hacker News Who is Hiring jobs",
+  alternates: {
+    canonical: "/",
+  },
 };
 
 export default function RootLayout({
