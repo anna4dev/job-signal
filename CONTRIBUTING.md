@@ -10,7 +10,7 @@ Thank you for contributing. This project values **small, reviewable changes** ov
 - **Do not mix** in a single commit: a feature + mass formatting, dependency upgrades, or unrelated renames.
 - **Prefer bottom-up layering** when a change spans types → lib → hooks → UI:
 
-```
+```text
 types/profile.ts extension     → feat(types): ...
 lib/signals.ts pure functions  → feat(signals): ...
 lib/unifiedSignalsStorage.ts   → feat(signals): persist unified_signals_v1
@@ -22,7 +22,7 @@ app/... UI wiring (if any)     → feat(profile): ... (separate commit)
 
 Use [Conventional Commits](https://www.conventionalcommits.org/):
 
-```
+```text
 <type>(<scope>): <imperative summary>
 
 [optional body: why, not what]
@@ -41,7 +41,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/):
 
 ### Examples
 
-```
+```text
 ❌ feat: add unified signals + fix sitemap + update README roadmap
 ❌ refactor entire lib/ + feat profile suggestions in one commit
 

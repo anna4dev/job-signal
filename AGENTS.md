@@ -41,8 +41,8 @@ New client state must use versioned keys, coercion on read, and a custom `window
 ### Roadmap boundaries
 
 - Phase 2.2: persist + wire `computeUnifiedSignals`; no Fit UI yet.
-- Phase 3: deterministic `fit(job, unifiedSignals)` — do not implement until 2.2 is stable.
-- Phase 4+: OAuth / cloud sync — do not add prematurely.
+- Phase 3: deterministic `fit(job, unifiedSignals)` — wait until 2.2 is stable.
+- Phase 4+: OAuth / cloud sync — out of scope until then.
 
 ## File Navigation
 
