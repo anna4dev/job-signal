@@ -72,7 +72,7 @@ New client state must use versioned keys, coercion on read, and a custom `window
 
 ### Adopt when touching related code
 
-- **`params` / `searchParams` are Promises** — Use `await params` in new or modified pages (Next 15+).
+- **`params` / `searchParams` are Promises** — In new or modified pages (Next 15+), await both before use, e.g. `const { id } = await params` and `const { q } = await searchParams`.
 - **Default dynamic, cache opt-in** — Without `cacheComponents`, use explicit `fetch` cache options or direct DB reads in Route Handlers.
 - **Minimize `"use client"`** — Keep client boundaries at leaves; do not wrap entire pages.
 - **Suspense** — Wrap slow dynamic sections when adding streaming; avoid blocking whole pages.
