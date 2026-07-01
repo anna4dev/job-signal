@@ -122,6 +122,11 @@ npm install
 npm run dev
 ```
 
+## Contributing
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — atomic commits & PR review
+- [AGENTS.md](AGENTS.md) — AI-assisted development & architecture constraints
+
 ## Roadmap
 
 Future updates will follow this priority order:
