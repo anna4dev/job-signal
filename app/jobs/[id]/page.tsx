@@ -11,6 +11,7 @@ import JobSalaryCard from "@/components/JobOverrides/JobSalaryCard";
 import JobVisaSupportCard from "@/components/JobOverrides/JobVisaSupportCard";
 import JobTechStackTags from "@/components/JobOverrides/JobTechStackTags";
 import JobRawPostSection from "@/components/JobOverrides/JobRawPostSection";
+import JobDetailNotAJobShell from "@/components/JobOverrides/JobDetailNotAJobShell";
 export const revalidate = 300;
 
 export async function generateMetadata({
@@ -199,6 +200,7 @@ export default async function JobDetailPage({
       />
 
       <main className="max-w-6xl mx-auto px-4 mt-8">
+        <JobDetailNotAJobShell jobId={String(job.job_id)}>
         {/* Left Column: Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8">
@@ -424,6 +426,7 @@ export default async function JobDetailPage({
             </div>
           </div>
         </div>
+        </JobDetailNotAJobShell>
 
         <ProfileEntry />
         <BookmarkEntry />

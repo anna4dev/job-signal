@@ -1,27 +1,25 @@
 "use client";
+
 import { decode } from "html-entities";
 import ReportIssueSheet from "./ReportIssueSheet";
+import { useMarkedNotAJob } from "@/hooks/useMarkedNotAJob";
 import { JobRawPostSectionProps } from "@/types/job";
 
 export default function JobRawPostSection({
   jobData,
   baseTechStack,
 }: JobRawPostSectionProps) {
+  const markedNotAJob = useMarkedNotAJob(jobData.job_id);
+
   const formatRawText = (raw: string) => {
     const decoded = decode(raw || "");
     return decoded
       .replace(/\r\n/g, "\n")
-      // line break tags
       .replace(/<br\b[^>]*\/?>/gi, "\n")
-      // common block-level opening tags -> start a new paragraph
       .replace(/<(p|div|li|ul|ol|section|article|h[1-6])\b[^>]*>/gi, "\n\n")
-      // list item closing tags still deserve spacing
       .replace(/<\/li>/gi, "\n")
-      // block-level closing tags
       .replace(/<\/(p|div|ul|ol|section|article|h[1-6])>/gi, "\n\n")
-      // strip remaining tags
       .replace(/<[^>]+>/g, "")
-      // normalize repeated whitespace/newlines
       .replace(/[ \t]+\n/g, "\n")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
@@ -41,11 +39,18 @@ export default function JobRawPostSection({
           baseSalaryMax={jobData.salary_max}
           baseVisaSupported={jobData.location_visa_supported}
           baseTechStack={baseTechStack}
-          // 现在这里可以安全使用函数了，因为父组件也是 Client Component
-          trigger={(open) => (
+          disabled={markedNotAJob}
+          trigger={(open, disabled) => (
             <button
+              type="button"
               onClick={open}
-              className="px-3 py-1.5 bg-amber-50 border border-amber-100 hover:bg-amber-100 rounded-lg text-xs font-bold text-amber-800"
+              disabled={disabled}
+              aria-disabled={disabled}
+              className={
+                disabled
+                  ? "px-3 py-1.5 bg-slate-200 border border-slate-200 rounded-lg text-xs font-bold text-slate-400 cursor-not-allowed"
+                  : "px-3 py-1.5 bg-slate-900 border border-slate-900 hover:bg-slate-800 rounded-lg text-xs font-bold text-white cursor-pointer"
+              }
             >
               ⚠ Report Issue
             </button>
