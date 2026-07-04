@@ -30,18 +30,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Newest job drives the homepage freshness signal.
   const newestJobDate = jobEntries[0]?.lastModified ?? new Date();
 
+  // Indexable routes only. /bookmarks and /profile are local-first (noindex).
   return [
     {
       url: baseUrl,
       lastModified: newestJobDate,
       changeFrequency: "daily",
       priority: 1,
-    },
-    {
-      url: `${baseUrl}/bookmarks`,
-      lastModified: newestJobDate,
-      changeFrequency: "monthly",
-      priority: 0.3,
     },
     ...jobEntries,
   ];
