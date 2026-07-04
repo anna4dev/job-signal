@@ -2,7 +2,7 @@
 
 Structured, searchable interface for Hacker News "Who’s Hiring" jobs.
 
-website: https://www.jobsignal.dev/
+website: https://jobsignal.dev/
 
 ## Overview
 
@@ -17,7 +17,7 @@ Job Signal converts unstructured Hacker News hiring threads into structured job 
 
 ## Example Job Page
 
-https://www.jobsignal.dev/jobs/hn_47036452_0
+https://jobsignal.dev/jobs/hn_47036452_0
 
 Each job page includes:
 

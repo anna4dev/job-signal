@@ -13,10 +13,16 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  // Apex is canonical host; www redirects via vercel.json.
   metadataBase: new URL("https://jobsignal.dev"),
   title: "JobSignal",
   description:
     "Structured, searchable interface for Hacker News Who is Hiring jobs",
+  openGraph: {
+    url: "https://jobsignal.dev",
+    siteName: "JobSignal",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
