@@ -22,11 +22,10 @@ export default function JobDetailNotAJobShell({
       <JobNotAJobBanner jobId={jobId} />
       <div
         className={
-          marked
-            ? "opacity-40 grayscale pointer-events-none select-none"
-            : undefined
+          marked ? "opacity-40 grayscale select-none" : undefined
         }
-        aria-disabled={marked || undefined}
+        // inert blocks pointer + keyboard/AT focus inside (pointer-events-none alone does not)
+        {...(marked ? { inert: true as const } : {})}
       >
         {children}
       </div>

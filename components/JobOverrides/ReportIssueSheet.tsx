@@ -25,9 +25,18 @@ type FieldBaseline = {
 
 const ANONYMOUS_ID_KEY = "job_signal_anonymous_id_v1";
 
+/** Order-insensitive multiset equality (StackFilter may reorder tags). */
 function sameTechStack(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
-  return a.every((t, i) => t === b[i]);
+  const counts = new Map<string, number>();
+  for (const t of a) counts.set(t, (counts.get(t) ?? 0) + 1);
+  for (const t of b) {
+    const n = counts.get(t);
+    if (!n) return false;
+    if (n === 1) counts.delete(t);
+    else counts.set(t, n - 1);
+  }
+  return counts.size === 0;
 }
 
 interface ReportIssueSheetProps {
@@ -311,14 +320,12 @@ export default function ReportIssueSheet({
                 </span>
               </button>
 
-              {/* Stay mounted when not-a-job is selected — dim + block input, no layout jump */}
+              {/* Stay mounted when not-a-job is selected — dim + inert, no layout jump */}
               <div
                 className={`space-y-4 transition-opacity ${
-                  notAJobSelected
-                    ? "opacity-40 pointer-events-none select-none"
-                    : ""
+                  notAJobSelected ? "opacity-40 select-none" : ""
                 }`}
-                aria-disabled={notAJobSelected || undefined}
+                {...(notAJobSelected ? { inert: true as const } : {})}
               >
                 <div className="rounded-2xl border border-slate-200">
                   <button
