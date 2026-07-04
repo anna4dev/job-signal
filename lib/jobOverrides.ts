@@ -4,8 +4,19 @@ export type Overrides = Record<
     salary?: { type: "overwrite"; value: SalaryValue };
     visa_support?: { type: "overwrite"; value: boolean | null };
     tech_stack?: { add: string[]; remove: string[] };
+    // Local-only mark: listing misclassified as a job (report-only to API).
+    is_job?: { type: "overwrite"; value: false };
   }
 >;
+
+export function isMarkedNotAJob(
+  overrideForJob: Overrides[string] | undefined,
+): boolean {
+  return (
+    overrideForJob?.is_job?.type === "overwrite" &&
+    overrideForJob.is_job.value === false
+  );
+}
 
 export type SalaryValue = {
   min: number | null;
