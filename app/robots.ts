@@ -6,11 +6,13 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/api/"],
+        disallow: ["/api/", "/bookmarks", "/profile"],
       },
       {
+        // Explicit group replaces "*"; must repeat private-route disallows.
         userAgent: ["GPTBot", "ClaudeBot", "PerplexityBot"],
         allow: "/",
+        disallow: ["/api/", "/bookmarks", "/profile"],
       },
     ],
     sitemap: "https://jobsignal.dev/sitemap.xml",
