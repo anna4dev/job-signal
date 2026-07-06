@@ -29,6 +29,9 @@ const ensureTableSQL = `
   );
 `;
 
+/** Turso-managed: idx_job_corrections_idempotency (see README Database Schema). */
+const IDEMPOTENCY_INDEX = "idx_job_corrections_idempotency";
+
 /** Max distinct correction rows per anonymous user per job (abuse guard). */
 const MAX_CORRECTIONS_PER_JOB = 10;
 
@@ -53,6 +56,39 @@ function rowNumber(row: unknown, key: string): number {
   if (!row || typeof row !== "object") return 0;
   const value = (row as Record<string, unknown>)[key];
   return typeof value === "number" ? value : Number(value) || 0;
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const record = error as Record<string, unknown>;
+  const code = record.code;
+  if (code === "SQLITE_CONSTRAINT" || code === "SQLITE_CONSTRAINT_UNIQUE") {
+    return true;
+  }
+  const message =
+    typeof record.message === "string" ? record.message : String(error);
+  return (
+    /unique constraint failed/i.test(message) ||
+    /SQLITE_CONSTRAINT(_UNIQUE)?/i.test(message)
+  );
+}
+
+async function findExistingCorrectionId(
+  args: readonly [string, string, string, string, string],
+): Promise<string | undefined> {
+  const existingRes = await db.execute({
+    sql: `
+      SELECT id FROM job_corrections
+      WHERE anonymous_id = ?
+        AND job_id = ?
+        AND field = ?
+        AND correction_type = ?
+        AND corrected_value = ?
+      LIMIT 1
+    `,
+    args: [...args],
+  });
+  return rowString(existingRes.rows[0], "id");
 }
 
 export async function POST(req: Request) {
@@ -156,19 +192,7 @@ export async function POST(req: Request) {
       corrected_value,
     ] as const;
 
-    const existingRes = await db.execute({
-      sql: `
-        SELECT id FROM job_corrections
-        WHERE anonymous_id = ?
-          AND job_id = ?
-          AND field = ?
-          AND correction_type = ?
-          AND corrected_value = ?
-        LIMIT 1
-      `,
-      args: [...idempotencyArgs],
-    });
-    const existingId = rowString(existingRes.rows[0], "id");
+    const existingId = await findExistingCorrectionId(idempotencyArgs);
     if (existingId) {
       return NextResponse.json({ ok: true, id: existingId, duplicate: true });
     }
@@ -213,20 +237,9 @@ export async function POST(req: Request) {
       });
       return NextResponse.json({ ok: true, id });
     } catch (insertError) {
-      // Race: another request inserted the same payload after our SELECT.
-      const conflictRes = await db.execute({
-        sql: `
-          SELECT id FROM job_corrections
-          WHERE anonymous_id = ?
-            AND job_id = ?
-            AND field = ?
-            AND correction_type = ?
-            AND corrected_value = ?
-          LIMIT 1
-        `,
-        args: [...idempotencyArgs],
-      });
-      const conflictId = rowString(conflictRes.rows[0], "id");
+      if (!isUniqueConstraintError(insertError)) throw insertError;
+
+      const conflictId = await findExistingCorrectionId(idempotencyArgs);
       if (conflictId) {
         return NextResponse.json({
           ok: true,
@@ -234,6 +247,11 @@ export async function POST(req: Request) {
           duplicate: true,
         });
       }
+
+      console.error(
+        `job-corrections: ${IDEMPOTENCY_INDEX} violation but row not found`,
+        insertError,
+      );
       throw insertError;
     }
   } catch (e) {

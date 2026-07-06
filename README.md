@@ -102,6 +102,34 @@ Each job page includes:
     | created_at | DATETIME | Record creation time. |
     | updated_at | DATETIME | Last update time. |
 
+4.  job_corrections
+    | Field | Type | Description |
+    | :--- | :--- | :--- |
+    | id | TEXT | Primary key. |
+    | job_id | TEXT | FK to `jobs_structured.job_id`. |
+    | job_raw_id | TEXT | FK to `jobs_raw.id`. |
+    | anonymous_id | TEXT | Client-generated UUID (`job_signal_anonymous_id_v1`). |
+    | field | TEXT | Corrected field name (e.g. `salary`, `is_job`). |
+    | correction_type | TEXT | `overwrite`, `add`, or `remove`. |
+    | original_value | TEXT | JSON snapshot of the original value. |
+    | corrected_value | TEXT | JSON snapshot of the corrected value. |
+    | created_at | DATETIME | Record creation time. |
+
+    **Turso migration (required for API idempotency):** run once in the Turso console.
+
+    ```sql
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_job_corrections_idempotency
+    ON job_corrections (
+      anonymous_id,
+      job_id,
+      field,
+      correction_type,
+      corrected_value
+    );
+    ```
+
+    `/api/job-corrections` uses SELECT-then-INSERT for fast duplicate detection; the unique index closes the concurrent-request race and is handled as `duplicate: true`.
+
 ## Environment Variables
 
 Configure your `.env` file as follows:
