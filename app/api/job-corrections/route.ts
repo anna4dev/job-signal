@@ -29,17 +29,6 @@ const ensureTableSQL = `
   );
 `;
 
-const ensureIdempotencyIndexSQL = `
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_job_corrections_idempotency
-  ON job_corrections (
-    anonymous_id,
-    job_id,
-    field,
-    correction_type,
-    corrected_value
-  );
-`;
-
 /** Max distinct correction rows per anonymous user per job (abuse guard). */
 const MAX_CORRECTIONS_PER_JOB = 10;
 
@@ -48,7 +37,6 @@ const UUID_RE =
 
 async function ensureTable() {
   await db.execute(ensureTableSQL);
-  await db.execute(ensureIdempotencyIndexSQL);
 }
 
 function isNonEmptyString(v: unknown): v is string {
@@ -198,63 +186,56 @@ export async function POST(req: Request) {
 
     const id = randomUUID();
 
-    await db.execute({
-      sql: `
-        INSERT INTO job_corrections (
+    try {
+      await db.execute({
+        sql: `
+          INSERT INTO job_corrections (
+            id,
+            job_id,
+            job_raw_id,
+            anonymous_id,
+            field,
+            correction_type,
+            original_value,
+            corrected_value
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        args: [
           id,
           job_id,
           job_raw_id,
           anonymous_id,
           field,
           correction_type,
-          original_value,
-          corrected_value
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT (
-          anonymous_id,
-          job_id,
-          field,
-          correction_type,
-          corrected_value
-        ) DO NOTHING
-      `,
-      args: [
-        id,
-        job_id,
-        job_raw_id,
-        anonymous_id,
-        field,
-        correction_type,
-        originalValueStr,
-        corrected_value,
-      ],
-    });
-
-    const insertedRes = await db.execute({
-      sql: `
-        SELECT id FROM job_corrections
-        WHERE anonymous_id = ?
-          AND job_id = ?
-          AND field = ?
-          AND correction_type = ?
-          AND corrected_value = ?
-        LIMIT 1
-      `,
-      args: [...idempotencyArgs],
-    });
-    const insertedId = rowString(insertedRes.rows[0], "id");
-    if (!insertedId) {
-      return NextResponse.json(
-        { error: "Internal Server Error" },
-        { status: 500 },
-      );
+          originalValueStr,
+          corrected_value,
+        ],
+      });
+      return NextResponse.json({ ok: true, id });
+    } catch (insertError) {
+      // Race: another request inserted the same payload after our SELECT.
+      const conflictRes = await db.execute({
+        sql: `
+          SELECT id FROM job_corrections
+          WHERE anonymous_id = ?
+            AND job_id = ?
+            AND field = ?
+            AND correction_type = ?
+            AND corrected_value = ?
+          LIMIT 1
+        `,
+        args: [...idempotencyArgs],
+      });
+      const conflictId = rowString(conflictRes.rows[0], "id");
+      if (conflictId) {
+        return NextResponse.json({
+          ok: true,
+          id: conflictId,
+          duplicate: true,
+        });
+      }
+      throw insertError;
     }
-
-    return NextResponse.json({
-      ok: true,
-      id: insertedId,
-      duplicate: insertedId !== id,
-    });
   } catch (e) {
     console.error("job-corrections error:", e);
     return NextResponse.json(
