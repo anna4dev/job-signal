@@ -2,14 +2,14 @@
 
 import { decode } from "html-entities";
 import ReportIssueSheet from "./ReportIssueSheet";
-import { useMarkedNotAJob } from "@/hooks/useMarkedNotAJob";
+import { useJobCorrectionReported } from "@/hooks/useJobCorrectionReported";
 import { JobRawPostSectionProps } from "@/types/job";
 
 export default function JobRawPostSection({
   jobData,
   baseTechStack,
 }: JobRawPostSectionProps) {
-  const markedNotAJob = useMarkedNotAJob(jobData.job_id);
+  const correctionReported = useJobCorrectionReported(jobData.job_id);
 
   const formatRawText = (raw: string) => {
     const decoded = decode(raw || "");
@@ -39,7 +39,7 @@ export default function JobRawPostSection({
           baseSalaryMax={jobData.salary_max}
           baseVisaSupported={jobData.location_visa_supported}
           baseTechStack={baseTechStack}
-          disabled={markedNotAJob}
+          disabled={correctionReported}
           trigger={(open, disabled) => (
             <button
               type="button"

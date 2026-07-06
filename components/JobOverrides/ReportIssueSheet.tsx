@@ -148,7 +148,7 @@ export default function ReportIssueSheet({
     type: "overwrite" | "add" | "remove",
     val: unknown,
     orig: unknown,
-  ): Promise<boolean> => {
+  ): Promise<"ok" | "rate_limited" | "failed"> => {
     const anonId =
       localStorage.getItem(ANONYMOUS_ID_KEY) || crypto.randomUUID();
     localStorage.setItem(ANONYMOUS_ID_KEY, anonId);
@@ -167,10 +167,20 @@ export default function ReportIssueSheet({
           original_value: JSON.stringify(orig),
         }),
       });
-      return res.ok;
+      if (res.status === 429) return "rate_limited";
+      return res.ok ? "ok" : "failed";
     } catch {
-      return false;
+      return "failed";
     }
+  };
+
+  const handleSubmitFailure = (reason: "rate_limited" | "failed") => {
+    setSubmitting(false);
+    setSubmitError(
+      reason === "rate_limited"
+        ? "Too many reports for this job. Please try again later."
+        : "Report failed. Please try again.",
+    );
   };
 
   const openSheet = () => {
@@ -194,10 +204,9 @@ export default function ReportIssueSheet({
     setSubmitting(true);
     setSubmitError(null);
 
-    const ok = await postCorrection("is_job", "overwrite", false, true);
-    if (!ok) {
-      setSubmitting(false);
-      setSubmitError("Report failed. Please try again.");
+    const result = await postCorrection("is_job", "overwrite", false, true);
+    if (result !== "ok") {
+      handleSubmitFailure(result);
       return;
     }
 
@@ -253,7 +262,7 @@ export default function ReportIssueSheet({
       delete nextForJob.tech_stack;
     }
 
-    const reports: Promise<boolean>[] = [];
+    const reports: Promise<"ok" | "rate_limited" | "failed">[] = [];
     if (nextForJob.salary) {
       reports.push(
         postCorrection("salary", "overwrite", nextForJob.salary.value, {
@@ -291,9 +300,16 @@ export default function ReportIssueSheet({
     }
 
     const results = await Promise.all(reports);
-    if (results.length === 0 || results.some((r) => !r)) {
-      setSubmitting(false);
-      setSubmitError("Report failed. Please try again.");
+    if (results.length === 0) {
+      handleSubmitFailure("failed");
+      return;
+    }
+    if (results.some((r) => r === "rate_limited")) {
+      handleSubmitFailure("rate_limited");
+      return;
+    }
+    if (results.some((r) => r !== "ok")) {
+      handleSubmitFailure("failed");
       return;
     }
 

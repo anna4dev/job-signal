@@ -18,6 +18,19 @@ export function isMarkedNotAJob(
   );
 }
 
+/** True when this device has saved a report-driven override for the job. */
+export function hasJobCorrectionReport(
+  overrideForJob: Overrides[string] | undefined,
+): boolean {
+  if (!overrideForJob) return false;
+  if (isMarkedNotAJob(overrideForJob)) return true;
+  if (overrideForJob.salary !== undefined) return true;
+  if (overrideForJob.visa_support !== undefined) return true;
+  const tech = overrideForJob.tech_stack;
+  if (!tech) return false;
+  return (tech.add?.length ?? 0) > 0 || (tech.remove?.length ?? 0) > 0;
+}
+
 export type SalaryValue = {
   min: number | null;
   max: number | null;
