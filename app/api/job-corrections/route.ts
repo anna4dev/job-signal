@@ -29,12 +29,42 @@ const ensureTableSQL = `
   );
 `;
 
+const ensureIdempotencyIndexSQL = `
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_job_corrections_idempotency
+  ON job_corrections (
+    anonymous_id,
+    job_id,
+    field,
+    correction_type,
+    corrected_value
+  );
+`;
+
+/** Max distinct correction rows per anonymous user per job (abuse guard). */
+const MAX_CORRECTIONS_PER_JOB = 10;
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 async function ensureTable() {
   await db.execute(ensureTableSQL);
+  await db.execute(ensureIdempotencyIndexSQL);
 }
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
+}
+
+function rowString(row: unknown, key: string): string | undefined {
+  if (!row || typeof row !== "object") return undefined;
+  const value = (row as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function rowNumber(row: unknown, key: string): number {
+  if (!row || typeof row !== "object") return 0;
+  const value = (row as Record<string, unknown>)[key];
+  return typeof value === "number" ? value : Number(value) || 0;
 }
 
 export async function POST(req: Request) {
@@ -68,6 +98,12 @@ export async function POST(req: Request) {
     if (!isNonEmptyString(anonymous_id)) {
       return NextResponse.json(
         { error: "anonymous_id is required" },
+        { status: 400 },
+      );
+    }
+    if (!UUID_RE.test(anonymous_id)) {
+      return NextResponse.json(
+        { error: "invalid anonymous_id" },
         { status: 400 },
       );
     }
@@ -124,6 +160,42 @@ export async function POST(req: Request) {
       );
     }
 
+    const idempotencyArgs = [
+      anonymous_id,
+      job_id,
+      field,
+      correction_type,
+      corrected_value,
+    ] as const;
+
+    const existingRes = await db.execute({
+      sql: `
+        SELECT id FROM job_corrections
+        WHERE anonymous_id = ?
+          AND job_id = ?
+          AND field = ?
+          AND correction_type = ?
+          AND corrected_value = ?
+        LIMIT 1
+      `,
+      args: [...idempotencyArgs],
+    });
+    const existingId = rowString(existingRes.rows[0], "id");
+    if (existingId) {
+      return NextResponse.json({ ok: true, id: existingId, duplicate: true });
+    }
+
+    const countRes = await db.execute({
+      sql: `
+        SELECT COUNT(*) AS cnt FROM job_corrections
+        WHERE anonymous_id = ? AND job_id = ?
+      `,
+      args: [anonymous_id, job_id],
+    });
+    if (rowNumber(countRes.rows[0], "cnt") >= MAX_CORRECTIONS_PER_JOB) {
+      return NextResponse.json({ error: "Too many corrections" }, { status: 429 });
+    }
+
     const id = randomUUID();
 
     await db.execute({
@@ -138,6 +210,13 @@ export async function POST(req: Request) {
           original_value,
           corrected_value
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (
+          anonymous_id,
+          job_id,
+          field,
+          correction_type,
+          corrected_value
+        ) DO NOTHING
       `,
       args: [
         id,
@@ -151,7 +230,31 @@ export async function POST(req: Request) {
       ],
     });
 
-    return NextResponse.json({ ok: true, id });
+    const insertedRes = await db.execute({
+      sql: `
+        SELECT id FROM job_corrections
+        WHERE anonymous_id = ?
+          AND job_id = ?
+          AND field = ?
+          AND correction_type = ?
+          AND corrected_value = ?
+        LIMIT 1
+      `,
+      args: [...idempotencyArgs],
+    });
+    const insertedId = rowString(insertedRes.rows[0], "id");
+    if (!insertedId) {
+      return NextResponse.json(
+        { error: "Internal Server Error" },
+        { status: 500 },
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      id: insertedId,
+      duplicate: insertedId !== id,
+    });
   } catch (e) {
     console.error("job-corrections error:", e);
     return NextResponse.json(
