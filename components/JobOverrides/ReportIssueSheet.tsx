@@ -75,6 +75,8 @@ export default function ReportIssueSheet({
   const [salaryMax, setSalaryMax] = useState<number | null>(null);
   const [visaMode, setVisaMode] = useState<VisaMode>("not_mentioned");
   const [techStackSelected, setTechStackSelected] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const baseJob: BaseJobForOverrides = useMemo(
     () => ({
@@ -139,47 +141,75 @@ export default function ReportIssueSheet({
       visaMode !== baseline.visaMode ||
       !sameTechStack(techStackSelected, baseline.techStack));
 
-  const canSubmit = notAJobSelected || hasFieldChanges;
+  const canSubmit = (notAJobSelected || hasFieldChanges) && !submitting;
 
-  const report = (
+  const postCorrection = async (
     field: string,
     type: "overwrite" | "add" | "remove",
     val: unknown,
     orig: unknown,
-  ) => {
+  ): Promise<"ok" | "rate_limited" | "failed"> => {
     const anonId =
       localStorage.getItem(ANONYMOUS_ID_KEY) || crypto.randomUUID();
     localStorage.setItem(ANONYMOUS_ID_KEY, anonId);
 
-    fetch("/api/job-corrections", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        job_id: jobId,
-        job_raw_id: jobRawId,
-        anonymous_id: anonId,
-        field,
-        correction_type: type,
-        corrected_value: JSON.stringify(val),
-        original_value: JSON.stringify(orig),
-      }),
-    }).catch(() => {});
+    try {
+      const res = await fetch("/api/job-corrections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_id: jobId,
+          job_raw_id: jobRawId,
+          anonymous_id: anonId,
+          field,
+          correction_type: type,
+          corrected_value: JSON.stringify(val),
+          original_value: JSON.stringify(orig),
+        }),
+      });
+      if (res.status === 429) return "rate_limited";
+      return res.ok ? "ok" : "failed";
+    } catch {
+      return "failed";
+    }
+  };
+
+  const handleSubmitFailure = (reason: "rate_limited" | "failed") => {
+    setSubmitting(false);
+    setSubmitError(
+      reason === "rate_limited"
+        ? "Too many reports for this job. Please try again later."
+        : "Report failed. Please try again.",
+    );
   };
 
   const openSheet = () => {
     if (disabled) return;
     setNotAJobSelected(false);
     setBaseline(null);
+    setSubmitError(null);
+    setSubmitting(false);
     setIsOpen(true);
   };
 
   const closeSheet = () => {
     setNotAJobSelected(false);
     setBaseline(null);
+    setSubmitError(null);
+    setSubmitting(false);
     setIsOpen(false);
   };
 
-  const submitNotAJob = () => {
+  const submitNotAJob = async () => {
+    setSubmitting(true);
+    setSubmitError(null);
+
+    const result = await postCorrection("is_job", "overwrite", false, true);
+    if (result !== "ok") {
+      handleSubmitFailure(result);
+      return;
+    }
+
     const overrides = getJobOverridesFromLocalStorage();
     const current = overrides[jobId] || {};
     overrides[jobId] = {
@@ -190,14 +220,16 @@ export default function ReportIssueSheet({
     window.dispatchEvent(
       new CustomEvent(JOB_OVERRIDES_EVENT, { detail: { jobId } }),
     );
-    report("is_job", "overwrite", false, true);
     closeSheet();
   };
 
-  const submitFieldCorrections = () => {
-    const overrides = getJobOverridesFromLocalStorage();
-    const current = overrides[jobId] || {};
-    const nextForJob: Overrides[string] = { ...current };
+  const submitFieldCorrections = async () => {
+    setSubmitting(true);
+    setSubmitError(null);
+
+    const nextForJob: Overrides[string] = {
+      ...(getJobOverridesFromLocalStorage()[jobId] || {}),
+    };
 
     nextForJob.salary =
       salaryMode === "range_incorrect"
@@ -230,40 +262,70 @@ export default function ReportIssueSheet({
       delete nextForJob.tech_stack;
     }
 
+    const reports: Promise<"ok" | "rate_limited" | "failed">[] = [];
+    if (nextForJob.salary) {
+      reports.push(
+        postCorrection("salary", "overwrite", nextForJob.salary.value, {
+          min: baseSalaryMin,
+          max: baseSalaryMax,
+        }),
+      );
+    }
+    if (nextForJob.visa_support) {
+      reports.push(
+        postCorrection(
+          "visa_support",
+          "overwrite",
+          nextForJob.visa_support.value,
+          mapVisaSupportedValue(baseVisaSupported),
+        ),
+      );
+    }
+    if (nextForJob.tech_stack) {
+      if (nextForJob.tech_stack.add.length) {
+        reports.push(
+          postCorrection("tech_stack", "add", nextForJob.tech_stack.add, []),
+        );
+      }
+      if (nextForJob.tech_stack.remove.length) {
+        reports.push(
+          postCorrection(
+            "tech_stack",
+            "remove",
+            nextForJob.tech_stack.remove,
+            [],
+          ),
+        );
+      }
+    }
+
+    const results = await Promise.all(reports);
+    if (results.length === 0) {
+      handleSubmitFailure("failed");
+      return;
+    }
+    if (results.some((r) => r === "rate_limited")) {
+      handleSubmitFailure("rate_limited");
+      return;
+    }
+    if (results.some((r) => r !== "ok")) {
+      handleSubmitFailure("failed");
+      return;
+    }
+
+    const overrides = getJobOverridesFromLocalStorage();
     overrides[jobId] = nextForJob;
     setJobOverridesToLocalStorage(overrides);
     window.dispatchEvent(
       new CustomEvent(JOB_OVERRIDES_EVENT, { detail: { jobId } }),
     );
-
-    if (nextForJob.salary) {
-      report("salary", "overwrite", nextForJob.salary.value, {
-        min: baseSalaryMin,
-        max: baseSalaryMax,
-      });
-    }
-    if (nextForJob.visa_support) {
-      report(
-        "visa_support",
-        "overwrite",
-        nextForJob.visa_support.value,
-        mapVisaSupportedValue(baseVisaSupported),
-      );
-    }
-    if (nextForJob.tech_stack) {
-      if (nextForJob.tech_stack.add.length)
-        report("tech_stack", "add", nextForJob.tech_stack.add, []);
-      if (nextForJob.tech_stack.remove.length)
-        report("tech_stack", "remove", nextForJob.tech_stack.remove, []);
-    }
-
     closeSheet();
   };
 
   const onSubmit = () => {
     if (!canSubmit) return;
-    if (notAJobSelected) submitNotAJob();
-    else submitFieldCorrections();
+    if (notAJobSelected) void submitNotAJob();
+    else void submitFieldCorrections();
   };
 
   return (
@@ -431,10 +493,17 @@ export default function ReportIssueSheet({
               </div>
             </div>
 
-            <div className="p-5 border-t border-slate-100 flex gap-3">
+            <div className="p-5 border-t border-slate-100 space-y-3">
+              {submitError ? (
+                <p role="alert" className="text-sm font-medium text-red-600">
+                  {submitError}
+                </p>
+              ) : null}
+              <div className="flex gap-3">
               <button
                 onClick={closeSheet}
-                className="flex-1 px-4 py-2 text-sm font-bold text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 cursor-pointer"
+                disabled={submitting}
+                className="flex-1 px-4 py-2 text-sm font-bold text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -447,8 +516,9 @@ export default function ReportIssueSheet({
                     : "flex-1 px-4 py-2 text-sm font-bold text-slate-400 bg-slate-200 rounded-xl cursor-not-allowed"
                 }
               >
-                Submit
+                {submitting ? "Submitting…" : "Submit"}
               </button>
+              </div>
             </div>
           </div>
         </div>
