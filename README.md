@@ -229,3 +229,10 @@ _Goal: Proactive engagement on top of stable fit quality._
 
 - [ ] **5.1 Match Alerts**
 - Cron job executes fit and sends notifications.
+
+### Polish Backlog (non-blocking)
+
+- [ ] **UI: unify accent palette (blue → slate)**
+- Replace the `blue-*` accent used across home/bookmarks/profile/filters with a single slate-based token set (primary, primary-hover, accent-surface, focus-ring, selected).
+- Centralize into shared tokens instead of ~60 per-file class edits; keep focus-ring contrast accessible.
+- Cosmetic only; schedule after Phase 2.2 is stable.

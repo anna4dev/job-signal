@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useExplicitProfile } from "@/hooks/useExplicitProfile";
 import { useSavedSearches } from "@/hooks/useSavedSearches";
+import { useUnifiedSignals } from "@/hooks/useUnifiedSignals";
 import { getSuggestions } from "@/lib/profileSuggestions";
 import Switch from "@/components/Switch";
 import SegmentedControl from "@/components/SegmentedControl";
@@ -318,6 +319,9 @@ function rejItemCount(r: Rejections): number {
 export default function ProfileContent() {
   const { profile, updateProfile, resetProfile } = useExplicitProfile();
   const { savedSearches } = useSavedSearches();
+  // Phase 2.2 wiring: recompute + persist unified_signals_v1 while the profile
+  // page is mounted. No fit UI yet; this only keeps the derived cache fresh.
+  useUnifiedSignals();
   const router = useRouter();
   const [savedFlash, setSavedFlash] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
