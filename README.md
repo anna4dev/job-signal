@@ -157,7 +157,9 @@ npm run dev
 
 ## Roadmap
 
-Future updates will follow this priority order:
+Future updates follow a dual-track plan:
+- **Core matching track** keeps the mainline focused on `2.3 -> 3.x`.
+- **Company intelligence track** runs in parallel for To C growth (GSC exposure/click uplift) without blocking the mainline.
 
 ### Phase 1: Discovery Foundation
 
@@ -189,7 +191,7 @@ _Goal: Build stable matching inputs before introducing ranking complexity._
 - `/profile` page for roles, stack, salary, remote/visa, locations.
 - Persist `explicitProfile` locally.
 
-- [ ] **2.2 Unified Signals Contract**
+- [x] **2.2 Unified Signals Contract**
 - Define `explicitProfile + implicitSignals + contextualSignals`.
 - Persist `unifiedSignals` locally for downstream fit usage.
 
@@ -212,9 +214,70 @@ _Goal: Ship practical matching with clear reasons, not black-box scoring._
 - Keep collecting structured corrections/feedback.
 - Use feedback for monitoring and future tuning (not auto-learning yet).
 
+### Company Intelligence Track (Parallel)
+
+_Goal: grow discoverability and decision value via company pages without blocking the core `2.3 -> 3.x` track._
+
+Measurement note: activation/quality targets and exact numeric thresholds are defined in `analytics spec v1`.
+
+#### Phase A: Company Surface (v1)
+
+- Deliver baseline data + pages: `companies` list, `companies/[id]`, and `company profile + company jobs`.
+- Support bidirectional navigation (`jobs <-> company`) and company-page SEO policy (sitemap/canonical/metadata/indexing gates).
+- Enabled UI blocks: Hero, Quick Decision Zone, Company Jobs Zone, Page Footer Baseline.
+
+Exit criteria:
+- `company -> job` CTR >= target for 2 consecutive weeks.
+- Company page render success rate meets production reliability target.
+- Company page index coverage is measurable under Job Signal SEO policy.
+- Effective index rate (indexed company pages with impressions/clicks) >= target for 2 consecutive weeks.
+
+#### Phase B: Apply Intelligence (v2)
+
+- Add evidence-first decision signals: 30/90-day momentum, role/level mix, remote/visa/salary coverage, and baseline tech-stack coverage.
+- Enabled UI blocks: Evidence & Sources Zone, Trend Zone.
+- Implementation principle: prioritize reuse; do not block delivery.
+
+Exit criteria:
+- Company-page second-click rate >= target for 2 consecutive weeks.
+- Apply/bookmark conversion initiated from company pages >= target for 2 consecutive weeks.
+- Coverage for momentum/role/constraint/stack modules is measurable per company page.
+
+#### Phase C: Career Risk & Trajectory (v3)
+
+- Add long-horizon context: trajectory timeline, signal-consistency view, and same-lane peer comparison (3-5 companies).
+- Enabled UI block: Long-Horizon Zone.
+
+Boundaries:
+- v3 default uses internal structured signals only (`HN + in-product structured data`).
+- External enrichment is out of scope for v3 and belongs to v4.
+- Do not output a single "apply/do-not-apply" conclusion.
+
+Exit criteria:
+- Company-page 7-day revisit rate >= target for 2 consecutive weeks.
+- Peer-compare module usage is measurable and above activation threshold.
+- "Information not trustworthy" feedback rate stays below quality threshold.
+
+#### Optional Follow-up: External Evidence (v4, TBD)
+
+- Introduce Tavily enrichment only after product demand and data-quality thresholds are met.
+
+Trigger conditions:
+- v3 behavior indicates sustained user demand for long-horizon analysis.
+- External coverage/stability reaches a usable threshold.
+- Team has capacity to own source-consistency and maintenance costs.
+
+### Company Detail Structure (Reference)
+
+- **v1 sections**: Hero, Quick Decision Zone (hiring/role/constraint snapshots), Company Jobs Zone (sortable/filterable with `company -> job` path), Page Footer Baseline (`last updated`, coverage, source disclosure, feedback).
+- **v2 sections**: Evidence & Sources Zone (sample size/time window/source list/coverage hints) and Trend Zone (momentum/role/stack trends + anomaly hints).
+- **v3 sections**: Long-Horizon Zone (trajectory timeline, peer comparison, signal consistency, optional lenses).
+
 ### Phase 4: Identity & Sync Layer
 
 _Goal: Add account and multi-device consistency after core local-first value is proven._
+
+Gating rule for post-Phase-3 work: only starts after Phase 3 fit-quality gates pass for two consecutive releases.
 
 - [ ] **4.1 Identity Gateway**
 - Implement OAuth.
@@ -230,9 +293,9 @@ _Goal: Proactive engagement on top of stable fit quality._
 - [ ] **5.1 Match Alerts**
 - Cron job executes fit and sends notifications.
 
-### Polish Backlog (non-blocking)
+## Appendix: Design Ops Backlog
 
-- [ ] **UI: unify accent palette (blue → slate)**
-- Replace the `blue-*` accent used across home/bookmarks/profile/filters with a single slate-based token set (primary, primary-hover, accent-surface, focus-ring, selected).
-- Centralize into shared tokens instead of ~60 per-file class edits; keep focus-ring contrast accessible.
-- Cosmetic only; schedule after Phase 2.2 is stable.
+- [ ] **UI: unify accent palette (blue -> slate)**
+- Replace `blue-*` accents across home/bookmarks/profile/filters with a shared slate token set (`primary`, `primary-hover`, `accent-surface`, `focus-ring`, `selected`).
+- Centralize tokens instead of per-file class edits; keep focus-ring contrast accessible.
+- Cosmetic only; does not block product roadmap milestones.
