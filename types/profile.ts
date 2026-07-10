@@ -99,6 +99,8 @@ export interface ImplicitSignals {
     roles?: Weighted<ID>[];
     skills?: Weighted<ID>[];
     industries?: Weighted<ID>[];
+    companySizes?: Weighted<ID>[];
+    fundingStages?: Weighted<ID>[];
   };
   behaviorMetrics: {
     bookmarkCount: number;
@@ -156,7 +158,6 @@ export type FactorKey =
   | "visa_constraint"
   | "work_mode_constraint"
   | "location_constraint"
-  | "employment_type_constraint"
   | "hard_rejection_industry"
   | "hard_rejection_company"
   | "capability_skill_match" // proficiency × job required_skills

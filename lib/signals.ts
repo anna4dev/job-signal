@@ -7,8 +7,11 @@ import type {
   UnifiedSignals,
   ExplicitProfile,
 } from "@/types/profile";
-import type { BookmarkItem } from "@/types/job";
+import type { BookmarkItem, BookmarkStatus } from "@/types/job";
 import type { SavedSearchItem } from "@/hooks/useSavedSearches";
+import type { BookmarkJobSignalContext } from "@/types/signals";
+export { FACTOR_FIELD_MAP, factorJobField } from "@/lib/factorMap";
+export type { FactorJobField } from "@/lib/factorMap";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -17,12 +20,51 @@ const ALPHA = 0.3;
 
 const DEFAULT_HALF_LIFE_DAYS = 30;
 
+const APPLIED_STATUSES: BookmarkStatus[] = [
+  "Applied",
+  "Interviewing",
+  "Offer",
+];
+
 // ── ID canonicalization ──────────────────────────────────────────────────────
 // Free-text inputs admit casing/whitespace variants ("React" vs "react"). All
 // merge / rejection-conflict logic must compare on the canonical form, otherwise
 // soft rejections silently fail to remove preferred skills.
 function canonicalId(v: string): string {
   return v.trim().toLowerCase();
+}
+
+function bookmarkSignalWeight(status?: BookmarkStatus): number {
+  if (status && APPLIED_STATUSES.includes(status)) return 2;
+  return 1;
+}
+
+type CountEntry = { value: string; count: number };
+
+function addWeightedCount(
+  map: Map<string, CountEntry>,
+  raw: string | null | undefined,
+  weight: number,
+): void {
+  const v = raw?.trim();
+  if (!v || weight <= 0) return;
+  const key = canonicalId(v);
+  const entry = map.get(key);
+  if (entry) entry.count += weight;
+  else map.set(key, { value: v, count: weight });
+}
+
+function countsToFrequencyWeights(
+  map: Map<string, CountEntry>,
+): Weighted<ID>[] | undefined {
+  if (map.size === 0) return undefined;
+  const maxCount = Math.max(...Array.from(map.values()).map((e) => e.count));
+  if (maxCount <= 0) return undefined;
+  return Array.from(map.values()).map((e) => ({
+    value: e.value,
+    weight: e.count / maxCount,
+    source: "implicit" as const,
+  }));
 }
 
 // ── 1. applyDecay ─────────────────────────────────────────────────────────────
@@ -60,12 +102,15 @@ export function applyDecay(
     return items.map((i) => ({ ...i, weight: i.weight * factor }));
   }
 
+  const inferred = signals.inferredPreferences;
   return {
     ...signals,
     inferredPreferences: {
-      roles: decayList(signals.inferredPreferences.roles),
-      skills: decayList(signals.inferredPreferences.skills),
-      industries: decayList(signals.inferredPreferences.industries),
+      roles: decayList(inferred.roles),
+      skills: decayList(inferred.skills),
+      industries: decayList(inferred.industries),
+      companySizes: decayList(inferred.companySizes),
+      fundingStages: decayList(inferred.fundingStages),
     },
     decay: { ...signals.decay, computedAt: now },
   };
@@ -140,8 +185,16 @@ export function mergePreferences(
     roles: mergeList(explicit.roles, implicit.roles, new Set()),
     skills: mergeList(explicit.skills, implicit.skills, rejectedSkillIds),
     industries: mergeList(explicit.industries, implicit.industries, new Set()),
-    companySizes: normalizeWeights(explicit.companySizes),
-    fundingStages: normalizeWeights(explicit.fundingStages),
+    companySizes: mergeList(
+      explicit.companySizes,
+      implicit.companySizes,
+      new Set(),
+    ),
+    fundingStages: mergeList(
+      explicit.fundingStages,
+      implicit.fundingStages,
+      new Set(),
+    ),
     workMode: explicit.workMode
       ? normalizeWeights(explicit.workMode)
       : undefined,
@@ -150,55 +203,67 @@ export function mergePreferences(
 }
 
 // ── 4. extractImplicitSignals ─────────────────────────────────────────────────
-// Derives ImplicitSignals from Phase 1 data.
-//   - bookmarks → behaviorMetrics (count, applyRate). Job-attribute extraction
-//     (skills/industries) requires job detail joins and is deferred to Phase 2.2+.
-//   - savedSearches → inferredPreferences.skills (frequency of `filters.stack`,
-//     normalized to 0..1).
+// Derives ImplicitSignals from Phase 1 local data + bookmark job context.
+//   - bookmarks → behaviorMetrics; job/company attributes when context is supplied
+//   - savedSearches → inferredPreferences.skills from `filters.stack`
 //
-// Returns inferredPreferences.skills only when ≥1 stack value exists. Roles /
-// industries / etc. are intentionally not inferred (saved-search filters do
-// not carry that data, and capabilities are never inferred).
+// RULE: capabilities are never inferred from behavior (skills here are preference
+// signals, merged into preferences.skills with explicit dominance).
 export function extractImplicitSignals(
   bookmarks: BookmarkItem[],
   savedSearches: SavedSearchItem[],
+  bookmarkJobContexts: BookmarkJobSignalContext[] = [],
 ): ImplicitSignals {
   const bookmarkCount = bookmarks.length;
   const appliedCount = bookmarks.filter(
-    (b) => b.status === "Applied" || b.status === "Interviewing" || b.status === "Offer",
+    (b) => b.status !== undefined && APPLIED_STATUSES.includes(b.status),
   ).length;
   const applyRate = bookmarkCount > 0 ? appliedCount / bookmarkCount : 0;
 
-  // Frequency-weighted skill signals from saved-search stack filters.
-  // Map keyed by canonical id; preserves first-seen casing as the value.
-  const skillCounts = new Map<string, { value: string; count: number }>();
+  const weightByJobId = new Map(
+    bookmarks.map((b) => [b.job_id, bookmarkSignalWeight(b.status)]),
+  );
+
+  const skillCounts = new Map<string, CountEntry>();
+  const roleCounts = new Map<string, CountEntry>();
+  const industryCounts = new Map<string, CountEntry>();
+  const sizeCounts = new Map<string, CountEntry>();
+  const fundingCounts = new Map<string, CountEntry>();
+
   for (const s of savedSearches) {
     const stack = s.filters.stack;
     if (!stack) continue;
     for (const raw of stack.split(",")) {
-      const v = raw.trim();
-      if (!v) continue;
-      const key = canonicalId(v);
-      const entry = skillCounts.get(key);
-      if (entry) entry.count++;
-      else skillCounts.set(key, { value: v, count: 1 });
+      addWeightedCount(skillCounts, raw, 1);
     }
   }
 
-  let skills: Weighted<ID>[] | undefined;
-  if (skillCounts.size > 0) {
-    const maxCount = Math.max(
-      ...Array.from(skillCounts.values()).map((e) => e.count),
-    );
-    skills = Array.from(skillCounts.values()).map((e) => ({
-      value: e.value,
-      weight: e.count / maxCount,
-      source: "implicit" as const,
-    }));
+  for (const ctx of bookmarkJobContexts) {
+    const weight = weightByJobId.get(ctx.job_id) ?? 1;
+    addWeightedCount(roleCounts, ctx.role_title, weight);
+    addWeightedCount(industryCounts, ctx.industry, weight);
+    addWeightedCount(sizeCounts, ctx.size, weight);
+    addWeightedCount(fundingCounts, ctx.funding_stage, weight);
+    for (const tech of ctx.tech_stack) {
+      addWeightedCount(skillCounts, tech, weight);
+    }
   }
 
+  const inferredPreferences: ImplicitSignals["inferredPreferences"] = {};
+  const roles = countsToFrequencyWeights(roleCounts);
+  const skills = countsToFrequencyWeights(skillCounts);
+  const industries = countsToFrequencyWeights(industryCounts);
+  const companySizes = countsToFrequencyWeights(sizeCounts);
+  const fundingStages = countsToFrequencyWeights(fundingCounts);
+
+  if (roles) inferredPreferences.roles = roles;
+  if (skills) inferredPreferences.skills = skills;
+  if (industries) inferredPreferences.industries = industries;
+  if (companySizes) inferredPreferences.companySizes = companySizes;
+  if (fundingStages) inferredPreferences.fundingStages = fundingStages;
+
   return {
-    inferredPreferences: skills ? { skills } : {},
+    inferredPreferences,
     behaviorMetrics: { bookmarkCount, applyRate },
     decay: {
       halfLifeDays: DEFAULT_HALF_LIFE_DAYS,
@@ -216,9 +281,14 @@ export function computeUnifiedSignals(
   explicit: ExplicitProfile,
   bookmarks: BookmarkItem[],
   savedSearches: SavedSearchItem[],
+  bookmarkJobContexts: BookmarkJobSignalContext[] = [],
 ): UnifiedSignals {
   const now = Date.now();
-  const rawImplicit = extractImplicitSignals(bookmarks, savedSearches);
+  const rawImplicit = extractImplicitSignals(
+    bookmarks,
+    savedSearches,
+    bookmarkJobContexts,
+  );
   const decayedImplicit = applyDecay(rawImplicit, now);
 
   const mergedPreferences = mergePreferences(
@@ -237,25 +307,3 @@ export function computeUnifiedSignals(
     implicit: decayedImplicit,
   };
 }
-
-// ── FactorKey → job field mapping (Phase 2.3 / Phase 3 explainability) ────────
-export const FACTOR_FIELD_MAP = {
-  visa_constraint: "location_visa_supported",
-  work_mode_constraint: "work_style",
-  location_constraint: "location_country",
-  employment_type_constraint: "work_style",
-  hard_rejection_industry: "industry",
-  hard_rejection_company: "company_id",
-  capability_skill_match: "required_skills",
-  capability_level_match: "level",
-  preference_role_match: "role_title",
-  preference_skill_match: "tech_stack",
-  preference_industry_match: "industry",
-  preference_company_size_match: "size",
-  preference_funding_stage_match: "funding_stage",
-  preference_work_mode_match: "work_style",
-  preference_salary_match: "salary_min",
-  soft_rejection_oncall: "responsibilities",
-  soft_rejection_skill: "tech_stack",
-  soft_rejection_company_type: "size",
-} as const;

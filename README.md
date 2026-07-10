@@ -195,9 +195,10 @@ _Goal: Build stable matching inputs before introducing ranking complexity._
 - Merge `explicitProfile` + `implicitSignals` into normalized `UnifiedSignals`.
 - Persist `unified_signals_v1` locally for downstream fit usage.
 
-- [ ] **2.3 Signal Quality & Explainability Prep**
-- Harden signal extraction from bookmarks/searches.
-- Define stable factor mapping for fit explanations.
+- [x] **2.3 Signal Quality & Explainability Prep**
+- Enrich implicit signals from bookmarked jobs (industry, size, funding_stage, role, tech_stack) via `/api/jobs/signal-context`.
+- Harden saved-search stack extraction and applied-bookmark weighting.
+- Stabilize `FACTOR_FIELD_MAP` for Phase 3 fit explainability.
 
 ### Phase 3: Fit v1 (Deterministic + Explainable)
 
