@@ -99,6 +99,8 @@ export interface ImplicitSignals {
     roles?: Weighted<ID>[];
     skills?: Weighted<ID>[];
     industries?: Weighted<ID>[];
+    companySizes?: Weighted<ID>[];
+    fundingStages?: Weighted<ID>[];
   };
   behaviorMetrics: {
     bookmarkCount: number;
