@@ -192,8 +192,8 @@ _Goal: Build stable matching inputs before introducing ranking complexity._
 - Persist `explicitProfile` locally.
 
 - [x] **2.2 Unified Signals Contract**
-- Define `explicitProfile + implicitSignals + contextualSignals`.
-- Persist `unifiedSignals` locally for downstream fit usage.
+- Merge `explicitProfile` + `implicitSignals` into normalized `UnifiedSignals`.
+- Persist `unified_signals_v1` locally for downstream fit usage.
 
 - [ ] **2.3 Signal Quality & Explainability Prep**
 - Harden signal extraction from bookmarks/searches.
