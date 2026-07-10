@@ -15,11 +15,28 @@ function rowString(row: unknown, key: string): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+function isJsonSyntaxError(error: unknown): boolean {
+  return error instanceof SyntaxError;
+}
+
 /** Minimal job + company payload for bookmark-derived implicit signals. */
 export async function POST(req: Request) {
+  let body: unknown;
   try {
-    const body = await req.json();
-    const rawIds = body?.job_ids;
+    body = await req.json();
+  } catch (error) {
+    if (isJsonSyntaxError(error)) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    console.error("jobs/signal-context error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
+  }
+
+  try {
+    const rawIds = (body as { job_ids?: unknown } | null)?.job_ids;
 
     if (!Array.isArray(rawIds) || rawIds.length === 0) {
       return NextResponse.json({ jobs: [] as BookmarkJobSignalContext[] });

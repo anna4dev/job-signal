@@ -33,7 +33,8 @@ export function useUnifiedSignals(): UnifiedSignals {
   useEffect(() => {
     if (bookmarks.length === 0) return;
 
-    let cancelled = false;
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 10_000);
 
     void (async () => {
       try {
@@ -43,22 +44,27 @@ export function useUnifiedSignals(): UnifiedSignals {
           body: JSON.stringify({
             job_ids: bookmarks.map((b) => b.job_id),
           }),
+          signal: controller.signal,
         });
         if (!res.ok) {
-          if (!cancelled) setBookmarkJobContexts([]);
+          setBookmarkJobContexts([]);
           return;
         }
         const data = (await res.json()) as {
           jobs?: BookmarkJobSignalContext[];
         };
-        if (!cancelled) setBookmarkJobContexts(data.jobs ?? []);
-      } catch {
-        if (!cancelled) setBookmarkJobContexts([]);
+        setBookmarkJobContexts(data.jobs ?? []);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setBookmarkJobContexts([]);
+      } finally {
+        window.clearTimeout(timeoutId);
       }
     })();
 
     return () => {
-      cancelled = true;
+      controller.abort();
+      window.clearTimeout(timeoutId);
     };
   }, [bookmarkIdsKey, bookmarks]);
 

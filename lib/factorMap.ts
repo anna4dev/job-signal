@@ -3,12 +3,12 @@ import type { FactorKey } from "@/types/profile";
 /**
  * Stable FactorKey → job/company field mapping for Phase 3 fit() and explainability.
  * Values are column names on joined job detail rows (jobs_structured + company_structured).
+ * employment_type_constraint is omitted until jobs_structured exposes employment_type.
  */
 export const FACTOR_FIELD_MAP = {
   visa_constraint: "location_visa_supported",
   work_mode_constraint: "work_style",
   location_constraint: "location_country",
-  employment_type_constraint: "work_style",
   hard_rejection_industry: "industry",
   hard_rejection_company: "company_id",
   capability_skill_match: "required_skills",
