@@ -31,15 +31,24 @@ const ONCALL_RE = /\bon[\s-]?call\b/i;
 /** Soft-rejection penalty scale (keeps penalties from zeroing a strong match alone). */
 const SOFT_PENALTY_SCALE = 0.35;
 
+/** Min length before fuzzy substring matching is allowed (exact match always OK). */
+const MIN_FUZZY_LEN = 3;
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function canonical(v: string | null | undefined): string {
   return (v ?? "").trim().toLowerCase();
 }
 
-function includesCanonical(haystack: string, needle: string): boolean {
-  if (!haystack || !needle) return false;
-  return haystack.includes(needle) || needle.includes(haystack);
+/**
+ * Exact match always wins. Bidirectional substring only when both sides are
+ * long enough — avoids "us"⊂"russia", "go"⊂"google", "c"⊂"c++"/"react".
+ */
+function tokensMatch(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.length < MIN_FUZZY_LEN || b.length < MIN_FUZZY_LEN) return false;
+  return a.includes(b) || b.includes(a);
 }
 
 function deriveWorkMode(job: FitJobInput): WorkMode {
@@ -71,23 +80,23 @@ function locationAllows(job: FitJobInput, allow: LocationSpec[]): boolean {
 
     switch (spec.scope) {
       case "country":
-        if (country && (country === id || includesCanonical(country, id))) {
+        if (country && tokensMatch(country, id)) {
           return true;
         }
         return Boolean(spec.remoteOk && isRemote);
       case "city":
-        return Boolean(city && (city === id || includesCanonical(city, id)));
+        return Boolean(city && tokensMatch(city, id));
       case "region":
         return Boolean(
-          (country && (country === id || includesCanonical(country, id))) ||
-            (city && includesCanonical(city, id)),
+          (country && tokensMatch(country, id)) ||
+            (city && tokensMatch(city, id)),
         );
       case "remote_tz":
         if (!isRemote) return false;
         if (id === "global" || id.endsWith("_tz") || id.includes("global")) {
           return true;
         }
-        return !tz || includesCanonical(tz, id) || includesCanonical(id, tz);
+        return !tz || tokensMatch(tz, id);
       default:
         return false;
     }
@@ -103,7 +112,7 @@ function timezoneOk(
   const tz = canonical(job.location_timezone);
   if (!tz) return true;
   const target = overlap.toLowerCase();
-  return tz.includes(target) || target.includes(tz);
+  return tokensMatch(tz, target);
 }
 
 /**
@@ -122,7 +131,7 @@ function preferenceCoverage(
   for (const item of preferred) {
     const key = canonical(item.value);
     if (!key) continue;
-    if (jobKeys.some((jk) => jk === key || includesCanonical(jk, key))) {
+    if (jobKeys.some((jk) => tokensMatch(jk, key))) {
       matched += item.weight;
     }
   }
@@ -140,7 +149,7 @@ function roleMatchScore(
   for (const item of preferred) {
     const key = canonical(item.value);
     if (!key) continue;
-    if (title.includes(key) || key.includes(title)) {
+    if (tokensMatch(title, key)) {
       matched += item.weight;
     }
   }
@@ -194,7 +203,7 @@ function capabilitySkillScore(
     totalWeight += item.weight;
     const key = canonical(item.value);
     if (!key) continue;
-    if (jobKeys.some((jk) => jk === key || includesCanonical(jk, key))) {
+    if (jobKeys.some((jk) => tokensMatch(jk, key))) {
       matchedWeight += item.weight;
     }
   }
