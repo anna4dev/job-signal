@@ -204,8 +204,9 @@ _Goal: Build stable matching inputs before introducing ranking complexity._
 
 _Goal: Ship practical matching with clear reasons, not black-box scoring._
 
-- [ ] **3.1 Deterministic Fit Engine**
-- Deterministic utility outputs `fitScore + reasonTags + factorBreakdown`.
+- [x] **3.1 Deterministic Fit Engine**
+- Deterministic `fit(job, unifiedSignals)` outputs `fitScore + reasonTags + factorBreakdown`.
+- Hard constraints unmet → `fitScore = 0`; preferences are pre-normalized (no `normalizeWeights` in fit).
 
 - [ ] **3.2 Best Fit View + Sort Toggle**
 - Toggle `Best Fit`, `Newest`, `Highest Pay`.
