@@ -135,11 +135,11 @@ Each job page includes:
     | :--- | :--- | :--- |
     | id | TEXT | Primary key. |
     | anonymous_id | TEXT | Client-generated UUID (`job_signal_anonymous_id_v1`). |
-    | job_id | TEXT | FK to `jobs_structured.job_id`. |
-    | event_type | TEXT | `impression`, `open`, `bookmark_add`, or `bookmark_remove`. |
+    | job_id | TEXT | FK to `jobs_structured.job_id` (nullable for `sort_change`). |
+    | event_type | TEXT | `impression`, `open`, `bookmark_add`, `bookmark_remove`, or `sort_change`. |
     | fit_score | INTEGER | Client fit score at event time (0–100), nullable. |
     | hard_fail | INTEGER | `1` if hard constraints failed, else `0`. |
-    | sort_mode | TEXT | List sort when event fired (`fit`, `newest`, `pay`). |
+    | sort_mode | TEXT | List sort (`fit` / `newest` / `pay`), or `from->to` for `sort_change`. |
     | position | INTEGER | 0-based position in the visible list. |
     | created_at | DATETIME | Record creation time. |
 
@@ -149,9 +149,11 @@ Each job page includes:
     CREATE TABLE IF NOT EXISTS fit_events (
       id TEXT PRIMARY KEY,
       anonymous_id TEXT NOT NULL,
-      job_id TEXT NOT NULL,
+      job_id TEXT,
       event_type TEXT NOT NULL CHECK (
-        event_type IN ('impression','open','bookmark_add','bookmark_remove')
+        event_type IN (
+          'impression','open','bookmark_add','bookmark_remove','sort_change'
+        )
       ),
       fit_score INTEGER,
       hard_fail INTEGER NOT NULL DEFAULT 0,
@@ -167,6 +169,8 @@ Each job page includes:
     CREATE INDEX IF NOT EXISTS idx_fit_events_sort_type_created
     ON fit_events (sort_mode, event_type, created_at);
     ```
+
+    If you already created `fit_events` without `sort_change` / nullable `job_id`, recreate the table (or migrate) before deploying this event type.
 
     Monitoring only — events do not update fit weights or `UnifiedSignals`. Example funnel by fit-score bucket (`sort=fit`):
 
@@ -288,7 +292,8 @@ _Goal: Ship practical matching with clear reasons, not black-box scoring._
 - Show fit score and reason tags on job cards; Best Fit ranks a recent matching pool client-side.
 
 - [x] **3.3 Fit Observability (behavior, not votes)**
-- Instrument natural funnels under Best Fit: impression → detail open → bookmark, bucketed by fitScore.
+- Instrument natural funnels under Best Fit: impression → detail open → bookmark (list + detail), bucketed by fitScore.
+- Track `sort_change` (`from->to`) to separate intentional Best Fit use from other sorts.
 - Compare `sort=fit` vs `newest`/`pay` on the same funnel via `fit_events` + `POST /api/fit-events`.
 - Monitoring only — no auto-updating fit weights; no thumbs-up UI.
 
@@ -377,3 +382,20 @@ _Goal: Proactive engagement on top of stable fit quality._
 - Replace `blue-*` accents across home/bookmarks/profile/filters with a shared slate token set (`primary`, `primary-hover`, `accent-surface`, `focus-ring`, `selected`).
 - Centralize tokens instead of per-file class edits; keep focus-ring contrast accessible.
 - Cosmetic only; does not block product roadmap milestones.
+
+## Appendix: Fit Observability Backlog
+
+_Post-3.3. Does not auto-update fit weights. Prefer natural behavior over survey UI._
+
+**Fit calibration (next)**
+- [ ] `detail_view` on job detail mount (reconcile with list `open`; cover deep links)
+- [ ] Detail dwell / scroll depth (filter mis-taps vs serious reads)
+- [ ] Pagination `page` events (whether high-fit conversion collapses to page 1)
+- [ ] Hard-fail interaction analysis (open/bookmark rates when `hard_fail=1`)
+
+**Product / growth (separate from Fit calibration)**
+- [ ] Apply Now / outbound JD click (when `jd_url` present)
+- [ ] Profile empty CTA → edit / profile save
+- [ ] Assist-fill suggestion applied
+- [ ] Saved search create / apply
+- [ ] Bookmark lifecycle status changes (Applied / Rejected / …)
