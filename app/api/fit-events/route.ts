@@ -15,6 +15,7 @@ const EVENT_TYPES = new Set([
   "open",
   "bookmark_add",
   "bookmark_remove",
+  "sort_change",
 ]);
 
 function isNonEmptyString(v: unknown): v is string {
@@ -32,7 +33,7 @@ function rowNumber(row: unknown, key: string): number {
 }
 
 type IncomingEvent = {
-  job_id: string;
+  job_id: string | null;
   event_type: string;
   fit_score: number | null;
   hard_fail: number;
@@ -43,8 +44,15 @@ type IncomingEvent = {
 function normalizeEvent(raw: unknown): IncomingEvent | null {
   if (!raw || typeof raw !== "object") return null;
   const obj = raw as Record<string, unknown>;
-  if (!isNonEmptyString(obj.job_id)) return null;
   if (typeof obj.event_type !== "string" || !EVENT_TYPES.has(obj.event_type)) {
+    return null;
+  }
+
+  const isSortChange = obj.event_type === "sort_change";
+  let jobId: string | null = null;
+  if (isNonEmptyString(obj.job_id)) {
+    jobId = obj.job_id.trim();
+  } else if (!isSortChange) {
     return null;
   }
 
@@ -63,8 +71,10 @@ function normalizeEvent(raw: unknown): IncomingEvent | null {
       ? obj.sort_mode.trim().slice(0, 32)
       : null;
 
+  if (isSortChange && !sortMode) return null;
+
   return {
-    job_id: obj.job_id.trim(),
+    job_id: jobId,
     event_type: obj.event_type,
     fit_score: fitScore,
     hard_fail: obj.hard_fail === true || obj.hard_fail === 1 ? 1 : 0,
@@ -137,23 +147,30 @@ export async function POST(req: Request) {
       );
     }
 
-    const jobIds = Array.from(new Set(events.map((e) => e.job_id)));
-    const placeholders = jobIds.map(() => "?").join(",");
-    const jobRes = await db.execute({
-      sql: `SELECT job_id FROM jobs_structured WHERE job_id IN (${placeholders})`,
-      args: jobIds,
-    });
-    const validJobs = new Set(
-      jobRes.rows
-        .map((row) => {
-          if (!row || typeof row !== "object") return "";
-          const id = (row as Record<string, unknown>).job_id;
-          return typeof id === "string" ? id : "";
-        })
-        .filter(Boolean),
+    const jobIds = Array.from(
+      new Set(
+        events
+          .map((e) => e.job_id)
+          .filter((id): id is string => typeof id === "string" && id.length > 0),
+      ),
     );
+    const validJobs = new Set<string>();
+    if (jobIds.length > 0) {
+      const placeholders = jobIds.map(() => "?").join(",");
+      const jobRes = await db.execute({
+        sql: `SELECT job_id FROM jobs_structured WHERE job_id IN (${placeholders})`,
+        args: jobIds,
+      });
+      for (const row of jobRes.rows) {
+        if (!row || typeof row !== "object") continue;
+        const id = (row as Record<string, unknown>).job_id;
+        if (typeof id === "string") validJobs.add(id);
+      }
+    }
 
-    const accepted = events.filter((e) => validJobs.has(e.job_id));
+    const accepted = events.filter(
+      (e) => e.job_id === null || validJobs.has(e.job_id),
+    );
     if (accepted.length === 0) {
       return NextResponse.json({ ok: true, inserted: 0 });
     }

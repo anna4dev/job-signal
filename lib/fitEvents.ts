@@ -4,13 +4,19 @@ export type FitEventType =
   | "impression"
   | "open"
   | "bookmark_add"
-  | "bookmark_remove";
+  | "bookmark_remove"
+  | "sort_change";
 
 export type FitEventPayload = {
-  job_id: string;
+  /** Required except for `sort_change`. */
+  job_id?: string | null;
   event_type: FitEventType;
   fit_score?: number | null;
   hard_fail?: boolean;
+  /**
+   * List sort context, or for `sort_change` the transition `from->to`
+   * (e.g. `newest->fit`).
+   */
   sort_mode?: string | null;
   position?: number | null;
 };
