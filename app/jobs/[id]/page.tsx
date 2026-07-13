@@ -214,6 +214,7 @@ export default async function JobDetailPage({
           tech_stack: job.tech_stack,
           required_skills: job.required_skills ?? undefined,
           responsibilities: job.responsibilities ?? undefined,
+          work_style: job.work_style ?? undefined,
         })}
         website={sourceLinks.website}
         jdUrl={job.jd_url || undefined}
