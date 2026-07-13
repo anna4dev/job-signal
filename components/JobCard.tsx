@@ -6,10 +6,33 @@ import { useMemo } from "react";
 
 interface JobCardProps {
   job: JobWithCompany;
+  fitScore?: number;
+  reasonTags?: string[];
+  hardFail?: boolean;
 }
 
-export default function JobCard({ job }: JobCardProps) {
-  // 安全地解析 JSON 字符串
+function formatSalaryRange(
+  min: number | null,
+  max: number | null,
+): string | null {
+  const hasMin = typeof min === "number" && Number.isFinite(min) && min > 0;
+  const hasMax = typeof max === "number" && Number.isFinite(max) && max > 0;
+  if (!hasMin && !hasMax) return null;
+
+  const fmt = (n: number) => `$${Math.round(n / 1000)}k`;
+  if (hasMin && hasMax) {
+    if (min === max) return fmt(min);
+    return `${fmt(min)} - ${fmt(max)}`;
+  }
+  return hasMin ? fmt(min!) : fmt(max!);
+}
+
+export default function JobCard({
+  job,
+  fitScore,
+  reasonTags,
+  hardFail,
+}: JobCardProps) {
   const getTechStack = (jsonStr: string): string[] => {
     try {
       return JSON.parse(jsonStr || "[]");
@@ -19,6 +42,8 @@ export default function JobCard({ job }: JobCardProps) {
   };
 
   const techStack = getTechStack(job.tech_stack);
+  const showFit = typeof fitScore === "number";
+  const salaryLabel = formatSalaryRange(job.salary_min, job.salary_max);
 
   const remoteLabel = job.location_timezone
     ? `Remote (${job.location_timezone})`
@@ -51,13 +76,6 @@ export default function JobCard({ job }: JobCardProps) {
             >
               {job.role_title}
             </Link>
-            {/* {job.confidence === 'high' && (
-              <span title="AI 解析置信度高" className="text-blue-500">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-              </span>
-            )} */}
             <BookmarkButton jobId={job.job_id} size="sm" showText={false} />
           </div>
 
@@ -110,22 +128,46 @@ export default function JobCard({ job }: JobCardProps) {
           </div>
         </div>
 
-        <div className="flex flex-col items-end shrink-0">
-          {job.salary_min ? (
+        <div className="flex flex-col items-end shrink-0 gap-2">
+          {showFit ? (
+            <div
+              className={`text-sm font-bold px-3 py-1 rounded-lg border ${
+                hardFail
+                  ? "text-slate-400 bg-slate-50 border-slate-100"
+                  : "text-slate-900 bg-slate-50 border-slate-200"
+              }`}
+              title={hardFail ? "Hard constraint not met" : "Fit score"}
+            >
+              Fit {fitScore}
+            </div>
+          ) : null}
+          {salaryLabel ? (
             <div className="text-base font-bold text-slate-900 bg-slate-50 px-3 py-1 rounded-lg border border-slate-100">
-              ${Math.round(job.salary_min / 1000)}k - $
-              {Math.round(job.salary_max! / 1000)}k
+              {salaryLabel}
             </div>
           ) : (
             <span className="text-slate-400 text-xs">Salary Competitive</span>
           )}
           {job.location_visa_supported === 1 && (
-            <span className="mt-2 text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
               Visa Sponsorship
             </span>
           )}
         </div>
       </div>
+
+      {showFit && reasonTags && reasonTags.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {reasonTags.slice(0, 4).map((tag, i) => (
+            <span
+              key={`${tag}-${i}`}
+              className="px-2 py-0.5 text-[11px] font-medium text-slate-600 bg-slate-50 rounded-md border border-slate-100"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       <div className="mt-4 flex flex-wrap gap-1.5">
         {techStack &&
@@ -140,9 +182,7 @@ export default function JobCard({ job }: JobCardProps) {
       </div>
 
       <div className="mt-5 pt-4 border-t border-slate-50 flex items-center justify-between">
-        <span className="text-xs text-slate-400">
-          Posted on {job.post_at} {/* 假设 id 含日期前缀 */}
-        </span>
+        <span className="text-xs text-slate-400">Posted on {job.post_at}</span>
         <Link
           href={`/jobs/${job.job_id}`}
           className="text-sm font-semibold text-slate-700 hover:text-blue-600 flex items-center gap-1"

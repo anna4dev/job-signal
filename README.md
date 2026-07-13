@@ -208,9 +208,9 @@ _Goal: Ship practical matching with clear reasons, not black-box scoring._
 - Deterministic `fit(job, unifiedSignals)` outputs `fitScore + reasonTags + factorBreakdown`.
 - Hard constraints unmet → `fitScore = 0`; preferences are pre-normalized (no `normalizeWeights` in fit).
 
-- [ ] **3.2 Best Fit View + Sort Toggle**
-- Toggle `Best Fit`, `Newest`, `Highest Pay`.
-- Show fit score and reason tags in job cards.
+- [x] **3.2 Best Fit View + Sort Toggle**
+- Toggle `Best Fit`, `Newest`, `Highest Pay` via `sort` query param.
+- Show fit score and reason tags on job cards; Best Fit ranks a recent matching pool client-side.
 
 - [ ] **3.3 Feedback Collection**
 - Keep collecting structured corrections/feedback.

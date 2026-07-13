@@ -1,12 +1,16 @@
 import { db } from "@/lib/db";
-import JobCard from "@/components/JobCard";
 import FilterBar from "@/components/FilterBar";
+import JobsList from "@/components/JobsList";
 import { JobWithCompany } from "@/types/job";
-import Pagination from "@/components/Pagination";
 import BookmarkEntry from "@/components/BookmarkEntry";
 import ProfileEntry from "@/components/ProfileEntry";
 import Footer from "@/components/Footer";
 import { unstable_cache } from "next/cache";
+import {
+  FIT_CANDIDATE_LIMIT,
+  parseJobSortMode,
+  type JobSortMode,
+} from "@/lib/jobSort";
 
 type QueryParam = string | number | null;
 export const revalidate = 300;
@@ -31,7 +35,6 @@ export const metadata = {
     description:
       "Stop scrolling long threads. Find your next tech job with our structured HN job board.",
     type: "website",
-    // images: ['/og-image.png'], // preview logo
   },
 };
 
@@ -45,10 +48,20 @@ type JobSearchFilters = {
   minSalary: number;
   isUSA: boolean;
   isIntl: boolean;
+  sort: JobSortMode;
 };
 
 const normalizeStacks = (stacks: string[]) =>
   Array.from(new Set(stacks.map((s) => s.trim()).filter(Boolean))).sort();
+
+function orderClause(sort: JobSortMode): string {
+  if (sort === "pay") {
+    // SQLite: push nulls last, then highest salary_max.
+    return "ORDER BY (j.salary_max IS NULL), j.salary_max DESC, j.post_at DESC";
+  }
+  // newest + fit candidate pool (fit re-sorts on the client)
+  return "ORDER BY j.post_at DESC";
+}
 
 const getJobsPage = unstable_cache(
   async (
@@ -57,8 +70,6 @@ const getJobsPage = unstable_cache(
     currentPage: number,
     pageSize: number,
   ): Promise<{ total: number; jobs: JobWithCompany[] }> => {
-    const offset = (currentPage - 1) * pageSize;
-
     const selectedStacks = normalizeStacks(filters.selectedStacks);
     const params: QueryParam[] = [];
     const whereParts: string[] = [];
@@ -71,7 +82,6 @@ const getJobsPage = unstable_cache(
       whereParts.push("1 = 1");
     }
 
-    // Job must contain ALL selected stacks.
     if (selectedStacks.length > 0) {
       const stackPlaceholders = selectedStacks.map(() => "?").join(",");
       whereParts.push(`(
@@ -119,25 +129,33 @@ const getJobsPage = unstable_cache(
 
     const whereClause = `WHERE ${whereParts.join(" AND ")}`;
 
-    // COUNT query can skip company join when there is no text query.
     const countFrom = hasTextQuery
       ? `FROM jobs_structured j JOIN company_structured c ON j.company_id = c.company_id`
       : `FROM jobs_structured j`;
     const countSql = `SELECT COUNT(*) as total ${countFrom} ${whereClause}`;
 
+    const isFitPool = filters.sort === "fit";
+    const limit = isFitPool ? FIT_CANDIDATE_LIMIT : pageSize;
+    const offset = isFitPool ? 0 : (currentPage - 1) * pageSize;
+
     const listSql = `
-      SELECT j.*, c.company_name
+      SELECT
+        j.*,
+        c.company_name,
+        c.industry,
+        c.size,
+        c.funding_stage
       FROM jobs_structured j
       JOIN company_structured c ON j.company_id = c.company_id
       ${whereClause}
-      ORDER BY j.post_at DESC
+      ${orderClause(filters.sort)}
       LIMIT ? OFFSET ?
     `;
 
     const [countRes, jobsRes] = await db.batch(
       [
         { sql: countSql, args: params },
-        { sql: listSql, args: [...params, pageSize, offset] },
+        { sql: listSql, args: [...params, limit, offset] },
       ],
       "read",
     );
@@ -150,19 +168,19 @@ const getJobsPage = unstable_cache(
 
     return { total, jobs };
   },
-  ["jobs-page-v2"],
-  { revalidate: 60, tags: ["jobs-page-tag-v2"] },
+  ["jobs-page-v3"],
+  { revalidate: 60, tags: ["jobs-page-tag-v3"] },
 );
 
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams: { [key: string]: string | undefined };
+  searchParams: Promise<{ [key: string]: string | undefined }>;
 }) {
-  // 1. Handle filtering logic (Server-side)
   const sParams = await searchParams;
   const currentPage = Number(sParams.page) || 1;
   const pageSize = 10;
+  const sort = parseJobSortMode(sParams.sort);
 
   const searchQuery = (sParams.q || "").trim();
   const isRemote = sParams.remote === "true";
@@ -174,12 +192,10 @@ export default async function JobsPage({
 
   const isUSA = sParams.usa === "true";
   const isIntl = sParams.intl === "true";
-  // const stage = sParams.stage || ""; // 'early' | 'growth' | 'mature'
   const selectedStacks = sParams.stack
     ? normalizeStacks(sParams.stack.split(","))
     : [];
 
-  // Make cache keys stable and explicit to avoid mismatches.
   const filtersKey = JSON.stringify({
     searchQuery,
     selectedStacks,
@@ -190,9 +206,9 @@ export default async function JobsPage({
     minSalary,
     isUSA,
     isIntl,
+    sort,
   });
 
-  // 2. Query (cached)
   const { total, jobs } = await getJobsPage(
     filtersKey,
     {
@@ -205,6 +221,7 @@ export default async function JobsPage({
       minSalary,
       isUSA,
       isIntl,
+      sort,
     },
     currentPage,
     pageSize,
@@ -223,33 +240,18 @@ export default async function JobsPage({
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        {/* Left Sidebar: Filters */}
         <aside className="lg:col-span-1">
           <FilterBar />
         </aside>
 
-        {/* Job List */}
-        <main className="lg:col-span-3 space-y-4">
-          <div className="flex justify-between items-center text-sm text-gray-500 mb-4">
-            <span>Found {total} matching jobs</span>
-          </div>
-
-          {jobs.map((job: JobWithCompany) => (
-            <JobCard key={job.job_id} job={job} />
-          ))}
-
-          {/* 5. Pagination Controller */}
-          {totalPages > 1 && (
-            <Pagination currentPage={currentPage} totalPages={totalPages} />
-          )}
-
-          {jobs.length === 0 && (
-            <div className="text-center py-20 bg-gray-50 rounded-lg border-2 border-gray-400 border-dashed">
-              <p className="text-gray-400">
-                No matching jobs found. Try adjusting your filters.
-              </p>
-            </div>
-          )}
+        <main className="lg:col-span-3">
+          <JobsList
+            jobs={jobs}
+            sort={sort}
+            total={total}
+            currentPage={currentPage}
+            totalPages={totalPages}
+          />
         </main>
         <ProfileEntry />
         <BookmarkEntry />
