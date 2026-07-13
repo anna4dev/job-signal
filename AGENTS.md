@@ -26,6 +26,7 @@ Pair with AI using **small, verifiable, revertible steps**. The agent follows re
 | `saved_searches`       | Saved filter snapshots           |
 | `job_overrides_v1`     | Per-job UI overrides             |
 | `unified_signals_v1`   | Computed UnifiedSignals (Phase 2.2+) |
+| `job_signal_anonymous_id_v1` | Stable anon id for corrections / fit events |
 
 New client state must use versioned keys, coercion on read, and a custom `window` event for cross-tab sync (mirror `PROFILE_EVENT` / `bookmark-change`).
 
