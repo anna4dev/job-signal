@@ -6,6 +6,8 @@ import { randomUUID } from "crypto";
 
 const MAX_EVENTS_PER_REQUEST = 50;
 const MAX_EVENTS_PER_ANON_DAY = 2000;
+/** Soft body cap before JSON parse (~50 events with metadata). */
+const MAX_BODY_BYTES = 64 * 1024;
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -88,9 +90,21 @@ function normalizeEvent(raw: unknown): IncomingEvent | null {
  * Does not update fit weights or UnifiedSignals.
  */
 export async function POST(req: Request) {
+  const contentLength = req.headers.get("content-length");
+  if (contentLength) {
+    const declared = Number(contentLength);
+    if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+    }
+  }
+
   let body: unknown;
   try {
-    body = await req.json();
+    const text = await req.text();
+    if (text.length > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+    }
+    body = text ? JSON.parse(text) : null;
   } catch (error) {
     if (isJsonSyntaxError(error)) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
@@ -132,6 +146,8 @@ export async function POST(req: Request) {
       );
     }
 
+    // Soft abuse guard only: client-rotatable anonymous_id + count-then-insert
+    // TOCTOU; escalate with edge IP throttling if this endpoint is abused.
     const countRes = await db.execute({
       sql: `
         SELECT COUNT(*) AS cnt FROM fit_events
@@ -175,16 +191,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, inserted: 0 });
     }
 
-    // libsql supports batch; insert row-by-row for simplicity and clear errors.
-    let inserted = 0;
-    for (const event of accepted) {
-      await db.execute({
-        sql: `
-          INSERT INTO fit_events (
-            id, anonymous_id, job_id, event_type,
-            fit_score, hard_fail, sort_mode, position
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `,
+    const insertSql = `
+      INSERT INTO fit_events (
+        id, anonymous_id, job_id, event_type,
+        fit_score, hard_fail, sort_mode, position
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+    await db.batch(
+      accepted.map((event) => ({
+        sql: insertSql,
         args: [
           randomUUID(),
           anonymous_id,
@@ -195,11 +210,11 @@ export async function POST(req: Request) {
           event.sort_mode,
           event.position,
         ],
-      });
-      inserted += 1;
-    }
+      })),
+      "write",
+    );
 
-    return NextResponse.json({ ok: true, inserted });
+    return NextResponse.json({ ok: true, inserted: accepted.length });
   } catch (e) {
     console.error("fit-events error:", e);
     return NextResponse.json(
