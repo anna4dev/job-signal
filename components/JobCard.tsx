@@ -11,6 +11,22 @@ interface JobCardProps {
   hardFail?: boolean;
 }
 
+function formatSalaryRange(
+  min: number | null,
+  max: number | null,
+): string | null {
+  const hasMin = typeof min === "number" && Number.isFinite(min) && min > 0;
+  const hasMax = typeof max === "number" && Number.isFinite(max) && max > 0;
+  if (!hasMin && !hasMax) return null;
+
+  const fmt = (n: number) => `$${Math.round(n / 1000)}k`;
+  if (hasMin && hasMax) {
+    if (min === max) return fmt(min);
+    return `${fmt(min)} - ${fmt(max)}`;
+  }
+  return hasMin ? fmt(min!) : fmt(max!);
+}
+
 export default function JobCard({
   job,
   fitScore,
@@ -27,6 +43,7 @@ export default function JobCard({
 
   const techStack = getTechStack(job.tech_stack);
   const showFit = typeof fitScore === "number";
+  const salaryLabel = formatSalaryRange(job.salary_min, job.salary_max);
 
   const remoteLabel = job.location_timezone
     ? `Remote (${job.location_timezone})`
@@ -124,10 +141,9 @@ export default function JobCard({
               Fit {fitScore}
             </div>
           ) : null}
-          {job.salary_min ? (
+          {salaryLabel ? (
             <div className="text-base font-bold text-slate-900 bg-slate-50 px-3 py-1 rounded-lg border border-slate-100">
-              ${Math.round(job.salary_min / 1000)}k - $
-              {Math.round(job.salary_max! / 1000)}k
+              {salaryLabel}
             </div>
           ) : (
             <span className="text-slate-400 text-xs">Salary Competitive</span>
