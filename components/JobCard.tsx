@@ -9,6 +9,8 @@ interface JobCardProps {
   fitScore?: number;
   reasonTags?: string[];
   hardFail?: boolean;
+  onOpenJob?: (jobId: string) => void;
+  onBookmarkToggle?: (jobId: string, nowBookmarked: boolean) => void;
 }
 
 function formatSalaryRange(
@@ -32,6 +34,8 @@ export default function JobCard({
   fitScore,
   reasonTags,
   hardFail,
+  onOpenJob,
+  onBookmarkToggle,
 }: JobCardProps) {
   const getTechStack = (jsonStr: string): string[] => {
     try {
@@ -72,11 +76,17 @@ export default function JobCard({
           <div className="flex items-center gap-2 mb-1">
             <Link
               href={`/jobs/${job.job_id}`}
+              onClick={() => onOpenJob?.(job.job_id)}
               className="text-lg font-bold text-slate-900 hover:text-blue-600 transition-colors"
             >
               {job.role_title}
             </Link>
-            <BookmarkButton jobId={job.job_id} size="sm" showText={false} />
+            <BookmarkButton
+              jobId={job.job_id}
+              size="sm"
+              showText={false}
+              onAfterToggle={onBookmarkToggle}
+            />
           </div>
 
           <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-sm text-slate-500">
@@ -185,6 +195,7 @@ export default function JobCard({
         <span className="text-xs text-slate-400">Posted on {job.post_at}</span>
         <Link
           href={`/jobs/${job.job_id}`}
+          onClick={() => onOpenJob?.(job.job_id)}
           className="text-sm font-semibold text-slate-700 hover:text-blue-600 flex items-center gap-1"
         >
           View Insight

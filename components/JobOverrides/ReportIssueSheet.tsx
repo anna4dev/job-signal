@@ -11,6 +11,7 @@ import {
   Overrides,
   setJobOverridesToLocalStorage,
 } from "@/lib/jobOverrides";
+import { getOrCreateAnonymousId } from "@/lib/anonymousId";
 
 type SalaryMode = "not_mentioned" | "range_incorrect";
 type VisaMode = "not_mentioned" | "supported" | "not_supported";
@@ -22,8 +23,6 @@ type FieldBaseline = {
   visaMode: VisaMode;
   techStack: string[];
 };
-
-const ANONYMOUS_ID_KEY = "job_signal_anonymous_id_v1";
 
 /** Order-insensitive multiset equality (StackFilter may reorder tags). */
 function sameTechStack(a: string[], b: string[]): boolean {
@@ -149,9 +148,8 @@ export default function ReportIssueSheet({
     val: unknown,
     orig: unknown,
   ): Promise<"ok" | "rate_limited" | "failed"> => {
-    const anonId =
-      localStorage.getItem(ANONYMOUS_ID_KEY) || crypto.randomUUID();
-    localStorage.setItem(ANONYMOUS_ID_KEY, anonId);
+    const anonId = getOrCreateAnonymousId();
+    if (!anonId) return "failed";
 
     try {
       const res = await fetch("/api/job-corrections", {

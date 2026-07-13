@@ -1,0 +1,225 @@
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { randomUUID } from "crypto";
+
+/** Append-only fit observability events. Schema managed in Turso (see README). */
+
+const MAX_EVENTS_PER_REQUEST = 50;
+const MAX_EVENTS_PER_ANON_DAY = 2000;
+/** Soft body cap before JSON parse (~50 events with metadata). */
+const MAX_BODY_BYTES = 64 * 1024;
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const EVENT_TYPES = new Set([
+  "impression",
+  "open",
+  "bookmark_add",
+  "bookmark_remove",
+  "sort_change",
+]);
+
+function isNonEmptyString(v: unknown): v is string {
+  return typeof v === "string" && v.trim().length > 0;
+}
+
+function isJsonSyntaxError(error: unknown): boolean {
+  return error instanceof SyntaxError;
+}
+
+function rowNumber(row: unknown, key: string): number {
+  if (!row || typeof row !== "object") return 0;
+  const value = (row as Record<string, unknown>)[key];
+  return typeof value === "number" ? value : Number(value) || 0;
+}
+
+type IncomingEvent = {
+  job_id: string | null;
+  event_type: string;
+  fit_score: number | null;
+  hard_fail: number;
+  sort_mode: string | null;
+  position: number | null;
+};
+
+function normalizeEvent(raw: unknown): IncomingEvent | null {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.event_type !== "string" || !EVENT_TYPES.has(obj.event_type)) {
+    return null;
+  }
+
+  const isSortChange = obj.event_type === "sort_change";
+  let jobId: string | null = null;
+  if (isNonEmptyString(obj.job_id)) {
+    jobId = obj.job_id.trim();
+  } else if (!isSortChange) {
+    return null;
+  }
+
+  let fitScore: number | null = null;
+  if (typeof obj.fit_score === "number" && Number.isFinite(obj.fit_score)) {
+    fitScore = Math.max(0, Math.min(100, Math.round(obj.fit_score)));
+  }
+
+  let position: number | null = null;
+  if (typeof obj.position === "number" && Number.isFinite(obj.position)) {
+    position = Math.max(0, Math.min(10_000, Math.round(obj.position)));
+  }
+
+  const sortMode =
+    typeof obj.sort_mode === "string" && obj.sort_mode.trim()
+      ? obj.sort_mode.trim().slice(0, 32)
+      : null;
+
+  if (isSortChange && !sortMode) return null;
+
+  return {
+    job_id: jobId,
+    event_type: obj.event_type,
+    fit_score: fitScore,
+    hard_fail: obj.hard_fail === true || obj.hard_fail === 1 ? 1 : 0,
+    sort_mode: sortMode,
+    position,
+  };
+}
+
+/**
+ * Batch ingest natural-behavior fit events for monitoring / calibration.
+ * Does not update fit weights or UnifiedSignals.
+ */
+export async function POST(req: Request) {
+  const contentLength = req.headers.get("content-length");
+  if (contentLength) {
+    const declared = Number(contentLength);
+    if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+    }
+  }
+
+  let body: unknown;
+  try {
+    const text = await req.text();
+    if (text.length > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+    }
+    body = text ? JSON.parse(text) : null;
+  } catch (error) {
+    if (isJsonSyntaxError(error)) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    console.error("fit-events error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
+  }
+
+  try {
+    const record = (body as Record<string, unknown>) || {};
+    const anonymous_id = record.anonymous_id;
+    const rawEvents = record.events;
+
+    if (!isNonEmptyString(anonymous_id) || !UUID_RE.test(anonymous_id)) {
+      return NextResponse.json(
+        { error: "invalid anonymous_id" },
+        { status: 400 },
+      );
+    }
+    if (!Array.isArray(rawEvents) || rawEvents.length === 0) {
+      return NextResponse.json(
+        { error: "events array is required" },
+        { status: 400 },
+      );
+    }
+
+    const events = rawEvents
+      .slice(0, MAX_EVENTS_PER_REQUEST)
+      .map(normalizeEvent)
+      .filter((e): e is IncomingEvent => e !== null);
+
+    if (events.length === 0) {
+      return NextResponse.json(
+        { error: "no valid events" },
+        { status: 400 },
+      );
+    }
+
+    // Soft abuse guard only: client-rotatable anonymous_id + count-then-insert
+    // TOCTOU; escalate with edge IP throttling if this endpoint is abused.
+    const countRes = await db.execute({
+      sql: `
+        SELECT COUNT(*) AS cnt FROM fit_events
+        WHERE anonymous_id = ?
+          AND created_at >= datetime('now', '-1 day')
+      `,
+      args: [anonymous_id],
+    });
+    if (rowNumber(countRes.rows[0], "cnt") + events.length > MAX_EVENTS_PER_ANON_DAY) {
+      return NextResponse.json(
+        { error: "Too many events" },
+        { status: 429 },
+      );
+    }
+
+    const jobIds = Array.from(
+      new Set(
+        events
+          .map((e) => e.job_id)
+          .filter((id): id is string => typeof id === "string" && id.length > 0),
+      ),
+    );
+    const validJobs = new Set<string>();
+    if (jobIds.length > 0) {
+      const placeholders = jobIds.map(() => "?").join(",");
+      const jobRes = await db.execute({
+        sql: `SELECT job_id FROM jobs_structured WHERE job_id IN (${placeholders})`,
+        args: jobIds,
+      });
+      for (const row of jobRes.rows) {
+        if (!row || typeof row !== "object") continue;
+        const id = (row as Record<string, unknown>).job_id;
+        if (typeof id === "string") validJobs.add(id);
+      }
+    }
+
+    const accepted = events.filter(
+      (e) => e.job_id === null || validJobs.has(e.job_id),
+    );
+    if (accepted.length === 0) {
+      return NextResponse.json({ ok: true, inserted: 0 });
+    }
+
+    const insertSql = `
+      INSERT INTO fit_events (
+        id, anonymous_id, job_id, event_type,
+        fit_score, hard_fail, sort_mode, position
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+    await db.batch(
+      accepted.map((event) => ({
+        sql: insertSql,
+        args: [
+          randomUUID(),
+          anonymous_id,
+          event.job_id,
+          event.event_type,
+          event.fit_score,
+          event.hard_fail,
+          event.sort_mode,
+          event.position,
+        ],
+      })),
+      "write",
+    );
+
+    return NextResponse.json({ ok: true, inserted: accepted.length });
+  } catch (e) {
+    console.error("fit-events error:", e);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
+  }
+}

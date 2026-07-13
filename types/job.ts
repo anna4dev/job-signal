@@ -41,6 +41,8 @@ export interface JobWithCompany {
   salary_median: number | null;
   confidence: ConfidenceLevel;
   post_at: string;
+  /** From jobs_structured when selected via j.*. */
+  work_style?: string | null;
 
   // data from company_structured
   company_name: string;

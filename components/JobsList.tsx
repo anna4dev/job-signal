@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import JobCard from "@/components/JobCard";
 import Pagination from "@/components/Pagination";
 import SortToggle from "@/components/SortToggle";
@@ -9,7 +9,11 @@ import { useUnifiedSignals } from "@/hooks/useUnifiedSignals";
 import { useExplicitProfile } from "@/hooks/useExplicitProfile";
 import { isProfileEmpty } from "@/lib/profile";
 import { fit, toFitJobInput } from "@/lib/fit";
-import type { JobSortMode } from "@/lib/jobSort";
+import { trackFitEvents, type FitEventPayload } from "@/lib/fitEvents";
+import {
+  rememberJobSortMode,
+  type JobSortMode,
+} from "@/lib/jobSort";
 import type { JobWithCompany } from "@/types/job";
 import type { FitResult } from "@/types/fit";
 
@@ -60,13 +64,66 @@ export default function JobsList({
   }, [annotated, sort]);
 
   const fitTotalPages = Math.max(1, Math.ceil(ordered.length / PAGE_SIZE));
+  const pageOffset = (currentPage - 1) * PAGE_SIZE;
   const displayJobs =
     sort === "fit"
-      ? ordered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+      ? ordered.slice(pageOffset, pageOffset + PAGE_SIZE)
       : ordered;
 
   const displayTotal = sort === "fit" ? ordered.length : total;
   const displayTotalPages = sort === "fit" ? fitTotalPages : totalPages;
+
+  const impressionKey = displayJobs.map(({ job }) => job.job_id).join(",");
+
+  useEffect(() => {
+    rememberJobSortMode(sort);
+  }, [sort]);
+
+  useEffect(() => {
+    if (displayJobs.length === 0) return;
+    trackFitEvents(
+      displayJobs.map(({ job, fitResult }, index) => ({
+        job_id: job.job_id,
+        event_type: "impression",
+        fit_score: fitResult.fitScore,
+        hard_fail: fitResult.hardFail,
+        sort_mode: sort,
+        position: pageOffset + index,
+      })),
+    );
+    // Re-fire when the visible job set / sort / page changes — not on every fit recompute.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- impressionKey encodes visible jobs
+  }, [impressionKey, sort, pageOffset]);
+
+  function eventFor(
+    jobId: string,
+    event_type: FitEventPayload["event_type"],
+  ): FitEventPayload | null {
+    const index = displayJobs.findIndex(({ job }) => job.job_id === jobId);
+    if (index < 0) return null;
+    const { fitResult } = displayJobs[index];
+    return {
+      job_id: jobId,
+      event_type,
+      fit_score: fitResult.fitScore,
+      hard_fail: fitResult.hardFail,
+      sort_mode: sort,
+      position: pageOffset + index,
+    };
+  }
+
+  function handleOpenJob(jobId: string) {
+    const event = eventFor(jobId, "open");
+    if (event) trackFitEvents([event]);
+  }
+
+  function handleBookmarkToggle(jobId: string, nowBookmarked: boolean) {
+    const event = eventFor(
+      jobId,
+      nowBookmarked ? "bookmark_add" : "bookmark_remove",
+    );
+    if (event) trackFitEvents([event]);
+  }
 
   return (
     <div className="space-y-4">
@@ -105,6 +162,8 @@ export default function JobsList({
           fitScore={fitResult.fitScore}
           reasonTags={fitResult.reasonTags}
           hardFail={fitResult.hardFail}
+          onOpenJob={handleOpenJob}
+          onBookmarkToggle={handleBookmarkToggle}
         />
       ))}
 
@@ -118,7 +177,7 @@ export default function JobsList({
       {displayJobs.length === 0 && (
         <div className="text-center py-20 bg-gray-50 rounded-lg border-2 border-gray-400 border-dashed">
           <p className="text-gray-400">
-            No matching jobs found. Try adjusting your filters.
+            No jobs found matching your criteria.
           </p>
         </div>
       )}

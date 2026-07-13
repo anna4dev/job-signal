@@ -12,6 +12,7 @@ import JobVisaSupportCard from "@/components/JobOverrides/JobVisaSupportCard";
 import JobTechStackTags from "@/components/JobOverrides/JobTechStackTags";
 import JobRawPostSection from "@/components/JobOverrides/JobRawPostSection";
 import JobDetailNotAJobShell from "@/components/JobOverrides/JobDetailNotAJobShell";
+import { toFitJobInput } from "@/lib/fit";
 export const revalidate = 300;
 
 export async function generateMetadata({
@@ -195,6 +196,26 @@ export default async function JobDetailPage({
       {/* Top Navigation */}
       <JobDetailNav
         jobId={job.job_id}
+        fitJob={toFitJobInput({
+          job_id: String(job.job_id),
+          company_id: String(job.company_id),
+          role_title: String(job.role_title),
+          level: job.level,
+          location_city: job.location_city,
+          location_country: job.location_country,
+          location_remote: job.location_remote,
+          location_timezone: job.location_timezone,
+          location_visa_supported: job.location_visa_supported,
+          salary_min: job.salary_min,
+          salary_max: job.salary_max,
+          industry: job.industry,
+          size: job.size,
+          funding_stage: job.funding_stage,
+          tech_stack: job.tech_stack,
+          required_skills: job.required_skills ?? undefined,
+          responsibilities: job.responsibilities ?? undefined,
+          work_style: job.work_style ?? undefined,
+        })}
         website={sourceLinks.website}
         jdUrl={job.jd_url || undefined}
       />
