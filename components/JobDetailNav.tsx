@@ -2,6 +2,12 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { useMemo } from "react";
+import { useUnifiedSignals } from "@/hooks/useUnifiedSignals";
+import { fit } from "@/lib/fit";
+import { trackFitEvents } from "@/lib/fitEvents";
+import { getRememberedJobSortMode } from "@/lib/jobSort";
+import type { FitJobInput } from "@/types/fit";
 
 const BookmarkButton = dynamic(() => import("./BookmarkButton"), {
   ssr: false,
@@ -12,11 +18,32 @@ const BookmarkButton = dynamic(() => import("./BookmarkButton"), {
 
 interface JobNavProps {
   jobId: string;
+  fitJob: FitJobInput;
   website?: string;
   jdUrl?: string;
 }
 
-export default function JobDetailNav({ jobId, website, jdUrl }: JobNavProps) {
+export default function JobDetailNav({
+  jobId,
+  fitJob,
+  website,
+  jdUrl,
+}: JobNavProps) {
+  const signals = useUnifiedSignals();
+  const fitResult = useMemo(() => fit(fitJob, signals), [fitJob, signals]);
+
+  const handleBookmarkToggle = (_id: string, nowBookmarked: boolean) => {
+    trackFitEvents([
+      {
+        job_id: jobId,
+        event_type: nowBookmarked ? "bookmark_add" : "bookmark_remove",
+        fit_score: fitResult.fitScore,
+        hard_fail: fitResult.hardFail,
+        sort_mode: getRememberedJobSortMode(),
+      },
+    ]);
+  };
+
   return (
     <nav className="bg-white border-b border-slate-200 sticky top-0 z-10">
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -41,7 +68,11 @@ export default function JobDetailNav({ jobId, website, jdUrl }: JobNavProps) {
         </Link>
 
         <div className="flex gap-3 items-center">
-          <BookmarkButton jobId={jobId} showText={false} />
+          <BookmarkButton
+            jobId={jobId}
+            showText={false}
+            onAfterToggle={handleBookmarkToggle}
+          />
 
           {website && (
             <a

@@ -10,7 +10,10 @@ import { useExplicitProfile } from "@/hooks/useExplicitProfile";
 import { isProfileEmpty } from "@/lib/profile";
 import { fit, toFitJobInput } from "@/lib/fit";
 import { trackFitEvents, type FitEventPayload } from "@/lib/fitEvents";
-import type { JobSortMode } from "@/lib/jobSort";
+import {
+  rememberJobSortMode,
+  type JobSortMode,
+} from "@/lib/jobSort";
 import type { JobWithCompany } from "@/types/job";
 import type { FitResult } from "@/types/fit";
 
@@ -71,6 +74,10 @@ export default function JobsList({
   const displayTotalPages = sort === "fit" ? fitTotalPages : totalPages;
 
   const impressionKey = displayJobs.map(({ job }) => job.job_id).join(",");
+
+  useEffect(() => {
+    rememberJobSortMode(sort);
+  }, [sort]);
 
   useEffect(() => {
     if (displayJobs.length === 0) return;
