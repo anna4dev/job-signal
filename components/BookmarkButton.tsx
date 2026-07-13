@@ -7,10 +7,13 @@ export default function BookmarkButton({
   jobId,
   showText = true,
   size = "md",
+  onAfterToggle,
 }: {
   jobId: string;
   showText?: boolean;
   size?: "sm" | "md";
+  /** Called after local toggle with the resulting bookmarked state. */
+  onAfterToggle?: (jobId: string, nowBookmarked: boolean) => void;
 }) {
   const { bookmarks, toggleBookmark } = useBookmarks();
   const bookmark = bookmarks.find((item) => item.job_id === jobId);
@@ -28,7 +31,11 @@ export default function BookmarkButton({
 
   return (
     <button
-      onClick={() => toggleBookmark(jobId)}
+      onClick={() => {
+        const next = !isBookmarked;
+        toggleBookmark(jobId);
+        onAfterToggle?.(jobId, next);
+      }}
       className={`relative flex items-center cursor-pointer transition-all duration-200 rounded-full hover:bg-slate-50 ${
         sizes[size].button
       } ${isBookmarked ? "text-blue-600" : "text-slate-400 hover:text-blue-600"}`}
