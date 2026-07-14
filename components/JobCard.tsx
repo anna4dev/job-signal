@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { JobWithCompany } from "@/types/job";
 import BookmarkButton from "@/components/BookmarkButton";
+import { formatSalaryRange } from "@/lib/formatSalary";
 import { useMemo } from "react";
 
 interface JobCardProps {
@@ -11,22 +12,6 @@ interface JobCardProps {
   hardFail?: boolean;
   onOpenJob?: (jobId: string) => void;
   onBookmarkToggle?: (jobId: string, nowBookmarked: boolean) => void;
-}
-
-function formatSalaryRange(
-  min: number | null,
-  max: number | null,
-): string | null {
-  const hasMin = typeof min === "number" && Number.isFinite(min) && min > 0;
-  const hasMax = typeof max === "number" && Number.isFinite(max) && max > 0;
-  if (!hasMin && !hasMax) return null;
-
-  const fmt = (n: number) => `$${Math.round(n / 1000)}k`;
-  if (hasMin && hasMax) {
-    if (min === max) return fmt(min);
-    return `${fmt(min)} - ${fmt(max)}`;
-  }
-  return hasMin ? fmt(min!) : fmt(max!);
 }
 
 export default function JobCard({
@@ -90,9 +75,12 @@ export default function JobCard({
           </div>
 
           <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-sm text-slate-500">
-            <span className="font-medium text-slate-700">
+            <Link
+              href={`/companies/${encodeURIComponent(job.company_id)}`}
+              className="font-medium text-slate-700 hover:text-blue-600 transition-colors"
+            >
               {job.company_name}
-            </span>
+            </Link>
 
             <div className="flex items-center gap-1">
               <svg
