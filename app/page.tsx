@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import Link from "next/link";
 import FilterBar from "@/components/FilterBar";
 import JobsList from "@/components/JobsList";
 import { JobWithCompany } from "@/types/job";
@@ -231,12 +232,22 @@ export default async function JobsPage({
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       <header className="mb-10">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Hacker News Jobs Explorer
-        </h1>
-        <p className="text-gray-500 mt-2">
-          Structured presentation of HN &quot;Who&apos;s Hiring&quot; listings
-        </p>
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">
+              Hacker News Jobs Explorer
+            </h1>
+            <p className="text-gray-500 mt-2">
+              Structured presentation of HN &quot;Who&apos;s Hiring&quot; listings
+            </p>
+          </div>
+          <Link
+            href="/companies"
+            className="text-sm font-medium text-slate-600 hover:text-blue-600"
+          >
+            Companies →
+          </Link>
+        </div>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
