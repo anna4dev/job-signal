@@ -18,6 +18,11 @@ interface JobCardProps {
 const MAX_TECH = 6;
 const MAX_REASON_TAGS = 4;
 
+/**
+ * Notion-style job summary card for the list. Renders an optional fit line
+ * (shown only when a numeric fitScore is provided), core meta, tech stack, and
+ * post date. onOpenJob / onBookmarkToggle surface interactions for fit events.
+ */
 export default function JobCard({
   job,
   fitScore,
