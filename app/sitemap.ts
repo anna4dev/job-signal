@@ -1,5 +1,6 @@
 import { MetadataRoute } from "next";
 import { db } from "@/lib/db";
+import { listIndexableCompanyIdsForSitemap } from "@/lib/companies";
 
 export const revalidate = 3600; // cache
 
@@ -27,10 +28,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.8,
   }));
 
+  const companies = await listIndexableCompanyIdsForSitemap(500);
+  const companyEntries: MetadataRoute.Sitemap = companies.map((c) => ({
+    url: `${baseUrl}/companies/${encodeURIComponent(c.company_id)}`,
+    lastModified: toDate(c.last_modified),
+    changeFrequency: "weekly",
+    priority: 0.7,
+  }));
+
   // Newest job drives the homepage freshness signal.
   const newestJobDate = jobEntries[0]?.lastModified ?? new Date();
+  const newestCompanyDate = companyEntries[0]?.lastModified ?? newestJobDate;
+  const companiesHubDate =
+    newestCompanyDate > newestJobDate ? newestCompanyDate : newestJobDate;
 
   // Indexable routes only. /bookmarks and /profile are local-first (noindex).
+  // Company detail URLs are limited to the indexing gate (see lib/companyIndexable).
   return [
     {
       url: baseUrl,
@@ -38,6 +51,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "daily",
       priority: 1,
     },
+    {
+      url: `${baseUrl}/companies`,
+      lastModified: companiesHubDate,
+      changeFrequency: "daily",
+      priority: 0.9,
+    },
     ...jobEntries,
+    ...companyEntries,
   ];
 }

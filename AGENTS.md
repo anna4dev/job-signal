@@ -54,6 +54,7 @@ New client state must use versioned keys, coercion on read, and a custom `window
 | Explicit profile  | `lib/profile.ts`, `hooks/useExplicitProfile.ts` |
 | Signal computation| `lib/signals.ts`                              |
 | Profile UI        | `app/profile/ProfileContent.tsx`              |
+| Companies         | `lib/companies.ts`, `lib/companyIndexable.ts`, `app/companies/` |
 | Assist-fill       | `lib/profileSuggestions.ts`                     |
 | Bookmarks         | `hooks/useBookmarks.ts`                       |
 | Saved searches    | `hooks/useSavedSearches.ts`, `lib/savedSearch.ts` |

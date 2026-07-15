@@ -305,9 +305,16 @@ Measurement note: activation/quality targets and exact numeric thresholds are de
 
 #### Phase A: Company Surface (v1)
 
-- Deliver baseline data + pages: `companies` list, `companies/[id]`, and `company profile + company jobs`.
-- Support bidirectional navigation (`jobs <-> company`) and company-page SEO policy (sitemap/canonical/metadata/indexing gates).
-- Enabled UI blocks: Hero, Quick Decision Zone, Company Jobs Zone, Page Footer Baseline.
+- [x] Deliver baseline data + pages: `companies` list, `companies/[id]`, and `company profile + company jobs`.
+- [x] Support bidirectional navigation (`jobs <-> company`) and company-page SEO policy (sitemap/canonical/metadata/indexing gates).
+- [x] Enabled UI blocks: Hero, Quick Decision Zone, Company Jobs Zone, Page Footer Baseline.
+
+**Indexing gate** (`lib/companyIndexable.ts`) — a company is sitemap/`index`-eligible when all hold:
+1. `job_count > 2`
+2. Cross-month: distinct `YYYY-MM` of `post_at` > 1
+3. `nonAdjacentMonthPostCount > 2` (posting months that have another posting month at calendar distance ≥ 2)
+
+Anonymous / placeholder names (`Anonymous`, `Stealth`, `Confidential`, …) are never indexable. Thin companies remain reachable from job links with `noindex,follow`. Sitemap still lists only gate-passing companies (notify/Indexing API does not replace this).
 
 Exit criteria:
 - `company -> job` CTR >= target for 2 consecutive weeks.

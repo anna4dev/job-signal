@@ -13,6 +13,7 @@ import JobTechStackTags from "@/components/JobOverrides/JobTechStackTags";
 import JobRawPostSection from "@/components/JobOverrides/JobRawPostSection";
 import JobDetailNotAJobShell from "@/components/JobOverrides/JobDetailNotAJobShell";
 import { toFitJobInput } from "@/lib/fit";
+import Link from "next/link";
 export const revalidate = 300;
 
 export async function generateMetadata({
@@ -233,7 +234,13 @@ export default async function JobDetailPage({
                 </h1>
                 <div className="flex items-center justify-between">
                   <p className="text-lg text-slate-600">
-                    {job.company_name} · {job.industry}
+                    <Link
+                      href={`/companies/${encodeURIComponent(String(job.company_id))}`}
+                      className="hover:text-blue-600 transition-colors"
+                    >
+                      {job.company_name}
+                    </Link>
+                    {job.industry ? ` · ${job.industry}` : ""}
                   </p>
                   <div className="text-right flex gap-2">
                     <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-wider">
