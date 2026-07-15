@@ -26,6 +26,15 @@ function parseJsonArray(raw: string | null): string[] {
   }
 }
 
+/** Malformed percent-encoding (e.g. a stray `%` from bot probes) must 404, not throw. */
+function safeDecodeId(raw: string): string | null {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+}
+
 function parseSourceLinks(raw: string | null): {
   website?: string;
   linkedin?: string;
@@ -50,9 +59,9 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id: rawId } = await params;
-  const id = decodeURIComponent(rawId);
-  const company = await getCompanyDetail(id);
-  if (!company) {
+  const id = safeDecodeId(rawId);
+  const company = id ? await getCompanyDetail(id) : null;
+  if (!company || !id) {
     return { title: "Company Not Found", robots: { index: false, follow: false } };
   }
   const stats = await getCompanyQuickStats(id, company.company_name);
@@ -77,9 +86,9 @@ export default async function CompanyDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id: rawId } = await params;
-  const id = decodeURIComponent(rawId);
-  const company = await getCompanyDetail(id);
-  if (!company) notFound();
+  const id = safeDecodeId(rawId);
+  const company = id ? await getCompanyDetail(id) : null;
+  if (!company || !id) notFound();
 
   const [stats, jobs] = await Promise.all([
     getCompanyQuickStats(id, company.company_name),

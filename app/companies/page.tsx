@@ -18,14 +18,19 @@ export const metadata: Metadata = {
 
 const PAGE_SIZE = 20;
 
+function firstParam(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return value[0] ?? "";
+  return value ?? "";
+}
+
 export default async function CompaniesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ [key: string]: string | undefined }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const sParams = await searchParams;
-  const currentPage = Number(sParams.page) || 1;
-  const q = (sParams.q || "").trim();
+  const currentPage = Number(firstParam(sParams.page)) || 1;
+  const q = firstParam(sParams.q).trim();
 
   const { total, companies } = await listIndexableCompanies({
     page: currentPage,

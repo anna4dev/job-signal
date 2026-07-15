@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { db } from "@/lib/db";
 import {
   isCompanyIndexable,
@@ -145,7 +146,7 @@ export async function listIndexableCompanyIdsForSitemap(limit = 500): Promise<
   }));
 }
 
-export async function getCompanyDetail(
+export const getCompanyDetail = cache(async function getCompanyDetail(
   companyId: string,
 ): Promise<CompanyDetail | null> {
   const result = await db.execute({
@@ -192,7 +193,7 @@ export async function getCompanyDetail(
     created_at: asNullableString(row.created_at),
     updated_at: asNullableString(row.updated_at),
   };
-}
+});
 
 export async function getCompanyJobs(
   companyId: string,
@@ -239,7 +240,7 @@ export async function getCompanyJobs(
   });
 }
 
-export async function getCompanyQuickStats(
+export const getCompanyQuickStats = cache(async function getCompanyQuickStats(
   companyId: string,
   companyName: string,
 ): Promise<CompanyQuickStats> {
@@ -318,4 +319,4 @@ export async function getCompanyQuickStats(
       postingMonths,
     }),
   };
-}
+});
