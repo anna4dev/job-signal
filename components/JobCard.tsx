@@ -79,11 +79,12 @@ export default function JobCard({
       {showFit ? (
         <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-normal text-slate-400">
           <span
-            className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold leading-none text-white ${
-              hardFail ? "bg-slate-500" : "bg-slate-900"
+            className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+              hardFail ? "bg-slate-100 text-slate-500" : "bg-slate-900 text-white"
             }`}
+            title={hardFail ? "Hard constraint not met" : "Fit score"}
           >
-            {hardFail ? "Constraint not met" : `Fit ${fitScore}`}
+            {hardFail ? "Unfit" : `Fit ${fitScore}`}
           </span>
           {visibleReasonTags.map((tag, i) => (
             <Fragment key={`${tag}-${i}`}>
