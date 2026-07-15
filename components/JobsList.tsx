@@ -33,6 +33,12 @@ interface JobsListProps {
   totalPages: number;
 }
 
+/**
+ * Client job list. Annotates each job with a local fit result, optionally
+ * re-orders by fit, paginates the visible set, and emits fit observability
+ * events (impression / open / bookmark). Fit UI is suppressed for empty
+ * profiles, where scoring is neutral and misleading.
+ */
 export default function JobsList({
   jobs,
   sort,
@@ -95,6 +101,7 @@ export default function JobsList({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- impressionKey encodes visible jobs
   }, [impressionKey, sort, pageOffset]);
 
+  /** Build a fit event for a visible job, or null if it is not on the page. */
   function eventFor(
     jobId: string,
     event_type: FitEventPayload["event_type"],
@@ -112,11 +119,13 @@ export default function JobsList({
     };
   }
 
+  /** Record an `open` fit event when a job card is opened. */
   function handleOpenJob(jobId: string) {
     const event = eventFor(jobId, "open");
     if (event) trackFitEvents([event]);
   }
 
+  /** Record a bookmark add/remove fit event from a job card toggle. */
   function handleBookmarkToggle(jobId: string, nowBookmarked: boolean) {
     const event = eventFor(
       jobId,
@@ -159,9 +168,9 @@ export default function JobsList({
         <JobCard
           key={job.job_id}
           job={job}
-          fitScore={fitResult.fitScore}
-          reasonTags={fitResult.reasonTags}
-          hardFail={fitResult.hardFail}
+          fitScore={profileEmpty ? undefined : fitResult.fitScore}
+          reasonTags={profileEmpty ? undefined : fitResult.reasonTags}
+          hardFail={profileEmpty ? undefined : fitResult.hardFail}
           onOpenJob={handleOpenJob}
           onBookmarkToggle={handleBookmarkToggle}
         />

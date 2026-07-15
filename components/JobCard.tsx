@@ -3,7 +3,8 @@ import Link from "next/link";
 import { JobWithCompany } from "@/types/job";
 import BookmarkButton from "@/components/BookmarkButton";
 import { formatSalaryRange } from "@/lib/formatSalary";
-import { useMemo } from "react";
+import { parseTechStackField } from "@/lib/parseJobFields";
+import { Fragment, useMemo } from "react";
 
 interface JobCardProps {
   job: JobWithCompany;
@@ -14,6 +15,14 @@ interface JobCardProps {
   onBookmarkToggle?: (jobId: string, nowBookmarked: boolean) => void;
 }
 
+const MAX_TECH = 6;
+const MAX_REASON_TAGS = 4;
+
+/**
+ * Notion-style job summary card for the list. Renders an optional fit line
+ * (shown only when a numeric fitScore is provided), core meta, tech stack, and
+ * post date. onOpenJob / onBookmarkToggle surface interactions for fit events.
+ */
 export default function JobCard({
   job,
   fitScore,
@@ -22,15 +31,16 @@ export default function JobCard({
   onOpenJob,
   onBookmarkToggle,
 }: JobCardProps) {
-  const getTechStack = (jsonStr: string): string[] => {
-    try {
-      return JSON.parse(jsonStr || "[]");
-    } catch {
-      return [];
-    }
-  };
+  const techStack = parseTechStackField(job.tech_stack);
+  const visibleTech = techStack.slice(0, MAX_TECH);
+  const extraTech = Math.max(0, techStack.length - MAX_TECH);
 
-  const techStack = getTechStack(job.tech_stack);
+  const visibleReasonTags = (reasonTags ?? []).slice(0, MAX_REASON_TAGS);
+  const extraReasonTags = Math.max(
+    0,
+    (reasonTags?.length ?? 0) - MAX_REASON_TAGS,
+  );
+
   const showFit = typeof fitScore === "number";
   const salaryLabel = formatSalaryRange(job.salary_min, job.salary_max);
 
@@ -54,18 +64,57 @@ export default function JobCard({
     return "Location N/A";
   }, [job]);
 
+  const metaItems: string[] = [locationText ?? "Location N/A"];
+  if (job.location_remote === 1) metaItems.push(remoteLabel);
+  if (job.location_visa_supported === 1) metaItems.push("Visa");
+
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-6 hover:border-blue-300 hover:shadow-sm transition-all group">
-      <div className="flex justify-between items-start gap-4">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <Link
-              href={`/jobs/${job.job_id}`}
-              onClick={() => onOpenJob?.(job.job_id)}
-              className="text-lg font-bold text-slate-900 hover:text-blue-600 transition-colors"
-            >
-              {job.role_title}
-            </Link>
+    <div className="bg-white border border-slate-200 rounded-xl px-5 py-6 transition-all hover:border-slate-300 hover:shadow-sm focus-within:border-slate-300 focus-within:ring-2 focus-within:ring-slate-100">
+      {/* Fit micro-label row — text-only, disappears when no fit score */}
+      {showFit ? (
+        <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-normal text-slate-400">
+          <span
+            className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+              hardFail ? "bg-slate-100 text-slate-500" : "bg-slate-900 text-white"
+            }`}
+            title={hardFail ? "Hard constraint not met" : "Fit score"}
+          >
+            {hardFail ? "Unfit" : `Fit ${fitScore}`}
+          </span>
+          {visibleReasonTags.map((tag, i) => (
+            <Fragment key={`${tag}-${i}`}>
+              {i > 0 ? (
+                <span className="text-slate-300" aria-hidden="true">
+                  •
+                </span>
+              ) : null}
+              <span>{tag}</span>
+            </Fragment>
+          ))}
+          {extraReasonTags > 0 ? (
+            <Fragment>
+              {visibleReasonTags.length > 0 ? (
+                <span className="text-slate-300" aria-hidden="true">
+                  •
+                </span>
+              ) : null}
+              <span>+{extraReasonTags} more</span>
+            </Fragment>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Title + save (left), salary (right, wraps on narrow screens) */}
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <Link
+            href={`/jobs/${job.job_id}`}
+            onClick={() => onOpenJob?.(job.job_id)}
+            className="text-lg font-semibold leading-snug tracking-tight text-slate-900 transition-colors hover:text-slate-600 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+          >
+            {job.role_title}
+          </Link>
+          <div className="shrink-0">
             <BookmarkButton
               jobId={job.job_id}
               size="sm"
@@ -73,134 +122,64 @@ export default function JobCard({
               onAfterToggle={onBookmarkToggle}
             />
           </div>
-
-          <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-sm text-slate-500">
-            <Link
-              href={`/companies/${encodeURIComponent(job.company_id)}`}
-              className="font-medium text-slate-700 hover:text-blue-600 transition-colors"
-            >
-              {job.company_name}
-            </Link>
-
-            <div className="flex items-center gap-1">
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>
-              {locationText}
-            </div>
-
-            {job.location_remote === 1 && (
-              <span className="flex items-center gap-1 text-emerald-600 font-medium">
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                {remoteLabel}
-              </span>
-            )}
-          </div>
         </div>
 
-        <div className="flex flex-col items-end shrink-0 gap-2">
-          {showFit ? (
-            <div
-              className={`text-sm font-bold px-3 py-1 rounded-lg border ${
-                hardFail
-                  ? "text-slate-400 bg-slate-50 border-slate-100"
-                  : "text-slate-900 bg-slate-50 border-slate-200"
-              }`}
-              title={hardFail ? "Hard constraint not met" : "Fit score"}
-            >
-              Fit {fitScore}
-            </div>
-          ) : null}
+        <div className="shrink-0">
           {salaryLabel ? (
-            <div className="text-base font-bold text-slate-900 bg-slate-50 px-3 py-1 rounded-lg border border-slate-100">
+            <span className="text-base font-semibold tabular-nums tracking-tight text-slate-800">
               {salaryLabel}
-            </div>
+            </span>
           ) : (
-            <span className="text-slate-400 text-xs">Salary Competitive</span>
-          )}
-          {job.location_visa_supported === 1 && (
-            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
-              Visa Sponsorship
+            <span className="text-sm font-medium text-slate-500">
+              Salary Competitive
             </span>
           )}
         </div>
       </div>
 
-      {showFit && reasonTags && reasonTags.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {reasonTags.slice(0, 4).map((tag, i) => (
-            <span
-              key={`${tag}-${i}`}
-              className="px-2 py-0.5 text-[11px] font-medium text-slate-600 bg-slate-50 rounded-md border border-slate-100"
-            >
-              {tag}
+      {/* Meta: company • location • remote • visa (flat, low-noise) */}
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-400/80">
+        <Link
+          href={`/companies/${encodeURIComponent(job.company_id)}`}
+          className="font-medium text-slate-700 underline-offset-2 transition-colors hover:text-slate-900 hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+        >
+          {job.company_name}
+        </Link>
+        {metaItems.map((item, i) => (
+          <Fragment key={`${item}-${i}`}>
+            <span className="text-slate-300" aria-hidden="true">
+              •
             </span>
-          ))}
-        </div>
-      ) : null}
+            <span>{item}</span>
+          </Fragment>
+        ))}
+      </div>
 
-      <div className="mt-4 flex flex-wrap gap-1.5">
-        {techStack &&
-          techStack.slice(0, 6).map((tech) => (
+      {/* Tech stack */}
+      {visibleTech.length > 0 ? (
+        <div className="mt-5 flex flex-wrap gap-x-1.5 gap-y-1.5">
+          {visibleTech.map((tech) => (
             <span
               key={tech}
-              className="px-2 py-0.5 text-xs font-medium text-slate-600 bg-slate-100 rounded-md border border-transparent group-hover:border-slate-200 transition-colors"
+              className="px-2 py-0.5 text-xs font-medium text-slate-600 bg-slate-100/60 rounded"
             >
               {tech}
             </span>
           ))}
-      </div>
+          {extraTech > 0 ? (
+            <span
+              className="px-2 py-0.5 text-xs font-medium text-slate-400"
+              title={techStack.slice(MAX_TECH).join(", ")}
+            >
+              +{extraTech}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
-      <div className="mt-5 pt-4 border-t border-slate-50 flex items-center justify-between">
-        <span className="text-xs text-slate-400">Posted on {job.post_at}</span>
-        <Link
-          href={`/jobs/${job.job_id}`}
-          onClick={() => onOpenJob?.(job.job_id)}
-          className="text-sm font-semibold text-slate-700 hover:text-blue-600 flex items-center gap-1"
-        >
-          View Insight
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M9 5l7 7-7 7"
-            />
-          </svg>
-        </Link>
+      {/* Posted — lightweight base line */}
+      <div className="mt-3 text-[11px] font-normal tracking-normal text-slate-400/80">
+        Posted {job.post_at}
       </div>
     </div>
   );
