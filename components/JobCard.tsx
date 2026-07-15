@@ -3,6 +3,7 @@ import Link from "next/link";
 import { JobWithCompany } from "@/types/job";
 import BookmarkButton from "@/components/BookmarkButton";
 import { formatSalaryRange } from "@/lib/formatSalary";
+import { parseTechStackField } from "@/lib/parseJobFields";
 import { Fragment, useMemo } from "react";
 
 interface JobCardProps {
@@ -25,18 +26,7 @@ export default function JobCard({
   onOpenJob,
   onBookmarkToggle,
 }: JobCardProps) {
-  const getTechStack = (jsonStr: string): string[] => {
-    try {
-      const parsed = JSON.parse(jsonStr || "[]");
-      return Array.isArray(parsed)
-        ? parsed.filter((t): t is string => typeof t === "string")
-        : [];
-    } catch {
-      return [];
-    }
-  };
-
-  const techStack = getTechStack(job.tech_stack);
+  const techStack = parseTechStackField(job.tech_stack);
   const visibleTech = techStack.slice(0, MAX_TECH);
   const extraTech = Math.max(0, techStack.length - MAX_TECH);
 
