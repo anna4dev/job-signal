@@ -159,9 +159,9 @@ export default function JobsList({
         <JobCard
           key={job.job_id}
           job={job}
-          fitScore={fitResult.fitScore}
-          reasonTags={fitResult.reasonTags}
-          hardFail={fitResult.hardFail}
+          fitScore={profileEmpty ? undefined : fitResult.fitScore}
+          reasonTags={profileEmpty ? undefined : fitResult.reasonTags}
+          hardFail={profileEmpty ? undefined : fitResult.hardFail}
           onOpenJob={handleOpenJob}
           onBookmarkToggle={handleBookmarkToggle}
         />
