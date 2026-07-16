@@ -17,6 +17,7 @@ import { getCompanyEvidence } from "@/lib/companyEvidence";
 
 export const revalidate = 300;
 
+/** Parse a JSON string array field from company_structured. */
 function parseJsonArray(raw: string | null): string[] {
   if (!raw) return [];
   try {
@@ -38,6 +39,7 @@ function safeDecodeId(raw: string): string | null {
   }
 }
 
+/** Parse website / LinkedIn URLs from company source_links JSON. */
 function parseSourceLinks(raw: string | null): {
   website?: string;
   linkedin?: string;

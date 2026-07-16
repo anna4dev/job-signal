@@ -1,9 +1,11 @@
 import type { CompanyEvidence } from "@/types/company";
 
+/** Format a 0–100 coverage share for display. */
 function pct(value: number | null): string {
   return value == null ? "—" : `${value}%`;
 }
 
+/** Format an ISO timestamp as YYYY-MM-DD. */
 function dateLabel(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toISOString().slice(0, 10);

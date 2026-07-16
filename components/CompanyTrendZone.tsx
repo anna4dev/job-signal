@@ -1,5 +1,6 @@
 import type { CompanyEvidence } from "@/types/company";
 
+/** Format a signed momentum delta for the Trend zone. */
 function formatDelta(delta: number | null): string {
   if (delta == null) return "—";
   if (delta > 0) return `+${delta}`;

@@ -210,6 +210,7 @@ Each job page includes:
     ```
 
 6.  company_events
+
     | Field | Type | Description |
     | :--- | :--- | :--- |
     | id | TEXT | Primary key. |

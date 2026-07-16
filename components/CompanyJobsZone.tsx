@@ -26,6 +26,7 @@ export default function CompanyJobsZone({
   jobs: CompanyJobSnapshot[];
   totalJobCount: number;
 }) {
+  /** Record a company → job second-click. */
   function handleJobClick(jobId: string, position: number) {
     trackCompanyEvents([
       {
@@ -37,6 +38,7 @@ export default function CompanyJobsZone({
     ]);
   }
 
+  /** Record a bookmark toggle initiated from the company jobs list. */
   function handleBookmarkToggle(
     jobId: string,
     position: number,
@@ -52,6 +54,7 @@ export default function CompanyJobsZone({
     ]);
   }
 
+  /** Record an outbound apply / original-post click from the company page. */
   function handleApplyClick(jobId: string, position: number) {
     trackCompanyEvents([
       {
