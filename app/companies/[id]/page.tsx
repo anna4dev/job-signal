@@ -1,16 +1,19 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Footer from "@/components/Footer";
 import BookmarkEntry from "@/components/BookmarkEntry";
 import ProfileEntry from "@/components/ProfileEntry";
 import DetailTopNav from "@/components/DetailTopNav";
+import CompanyPageTracker from "@/components/CompanyPageTracker";
+import CompanyJobsZone from "@/components/CompanyJobsZone";
+import CompanyEvidenceZone from "@/components/CompanyEvidenceZone";
+import CompanyTrendZone from "@/components/CompanyTrendZone";
 import {
   getCompanyDetail,
   getCompanyJobs,
   getCompanyQuickStats,
 } from "@/lib/companies";
-import { formatSalaryRange } from "@/lib/formatSalary";
+import { getCompanyEvidence } from "@/lib/companyEvidence";
 
 export const revalidate = 300;
 
@@ -90,9 +93,10 @@ export default async function CompanyDetailPage({
   const company = id ? await getCompanyDetail(id) : null;
   if (!company || !id) notFound();
 
-  const [stats, jobs] = await Promise.all([
+  const [stats, jobs, evidence] = await Promise.all([
     getCompanyQuickStats(id, company.company_name),
     getCompanyJobs(id, 50),
+    getCompanyEvidence(id, company.source),
   ]);
 
   const techStack = parseJsonArray(company.tech_stack);
@@ -106,6 +110,7 @@ export default async function CompanyDetailPage({
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
+      <CompanyPageTracker companyId={id} />
       <DetailTopNav
         fallbackHref="/companies"
         actions={
@@ -254,61 +259,14 @@ export default async function CompanyDetailPage({
           ) : null}
         </section>
 
-        {/* Company Jobs Zone */}
-        <section className="bg-white rounded-2xl border border-slate-200 p-8">
-          <div className="flex items-baseline justify-between gap-3 mb-6">
-            <h2 className="text-xl font-bold text-slate-900">Open & recent roles</h2>
-            <span className="text-xs text-slate-400">
-              Showing {jobs.length}
-              {stats.jobCount > jobs.length ? ` of ${stats.jobCount}` : ""}
-            </span>
-          </div>
+        <CompanyEvidenceZone evidence={evidence} />
+        <CompanyTrendZone evidence={evidence} />
 
-          {jobs.length === 0 ? (
-            <p className="text-sm text-slate-400">No jobs linked yet.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {jobs.map((job) => {
-                const salary = formatSalaryRange(job.salary_min, job.salary_max);
-                const location = [job.location_city, job.location_country]
-                  .filter(Boolean)
-                  .join(", ");
-                return (
-                  <li key={job.job_id} className="py-4 first:pt-0 last:pb-0">
-                    <Link
-                      href={`/jobs/${job.job_id}`}
-                      className="group flex flex-wrap items-start justify-between gap-3"
-                    >
-                      <div>
-                        <p className="font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">
-                          {job.role_title}
-                        </p>
-                        <p className="text-sm text-slate-500 mt-1">
-                          {[
-                            job.level,
-                            location || null,
-                            job.location_remote === 1 ? "Remote" : null,
-                            job.location_visa_supported === 1 ? "Visa" : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </p>
-                      </div>
-                      <div className="text-right text-sm shrink-0">
-                        {salary ? (
-                          <p className="font-semibold text-slate-800">{salary}</p>
-                        ) : null}
-                        <p className="text-xs text-slate-400 mt-0.5">
-                          {job.post_at}
-                        </p>
-                      </div>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
+        <CompanyJobsZone
+          companyId={id}
+          jobs={jobs}
+          totalJobCount={stats.jobCount}
+        />
 
         {/* Page Footer Baseline */}
         <section className="rounded-2xl border border-slate-200 bg-white px-6 py-5 text-xs text-slate-500 space-y-2">
