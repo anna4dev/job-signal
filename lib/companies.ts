@@ -2,8 +2,9 @@ import { cache } from "react";
 import { db } from "@/lib/db";
 import {
   isCompanyIndexable,
-  toYearMonth,
 } from "@/lib/companyIndexable";
+import { buildCompanyQuickStatsFromRows } from "@/lib/companyAggregates";
+import { loadCompanyJobAggregateRows } from "@/lib/companyJobRows";
 import type {
   CompanyDetail,
   CompanyJobSnapshot,
@@ -246,79 +247,6 @@ export const getCompanyQuickStats = cache(async function getCompanyQuickStats(
   companyId: string,
   companyName: string,
 ): Promise<CompanyQuickStats> {
-  const result = await db.execute({
-    sql: `
-      SELECT
-        job_id,
-        level,
-        location_remote,
-        location_visa_supported,
-        salary_min,
-        salary_max,
-        post_at
-      FROM jobs_structured
-      WHERE company_id = ?
-      ORDER BY post_at DESC
-    `,
-    args: [companyId],
-  });
-
-  const rows = result.rows as Record<string, unknown>[];
-  const jobCount = rows.length;
-  const postingMonths = rows
-    .map((r) => toYearMonth(asNullableString(r.post_at)))
-    .filter((m): m is string => !!m);
-
-  const remoteCount = rows.filter((r) => asNumber(r.location_remote) === 1)
-    .length;
-  const visaCount = rows.filter(
-    (r) => asNumber(r.location_visa_supported) === 1,
-  ).length;
-  const salaryCount = rows.filter(
-    (r) => r.salary_min != null || r.salary_max != null,
-  ).length;
-
-  const levelMap = new Map<string, number>();
-  for (const r of rows) {
-    const level = asString(r.level) || "unknown";
-    levelMap.set(level, (levelMap.get(level) || 0) + 1);
-  }
-  const topLevels = Array.from(levelMap.entries())
-    .map(([level, count]) => ({ level, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 4);
-
-  const postTimes = rows
-    .map((r) => asNullableString(r.post_at))
-    .filter((v): v is string => !!v)
-    .map((v) => new Date(v).getTime())
-    .filter((t) => Number.isFinite(t))
-    .sort((a, b) => a - b);
-
-  const firstPostAt =
-    postTimes.length > 0 ? new Date(postTimes[0]).toISOString() : null;
-  const lastPostAt =
-    postTimes.length > 0
-      ? new Date(postTimes[postTimes.length - 1]).toISOString()
-      : null;
-
-  const share = (n: number) =>
-    jobCount === 0 ? null : Math.round((n / jobCount) * 100);
-
-  return {
-    jobCount,
-    openRolesSample: Math.min(jobCount, 50),
-    remoteShare: share(remoteCount),
-    visaShare: share(visaCount),
-    salaryCoverage: share(salaryCount),
-    topLevels,
-    postingMonths: Array.from(new Set(postingMonths)).sort(),
-    firstPostAt,
-    lastPostAt,
-    indexable: isCompanyIndexable({
-      companyName,
-      jobCount,
-      postingMonths,
-    }),
-  };
+  const rows = await loadCompanyJobAggregateRows(companyId);
+  return buildCompanyQuickStatsFromRows(rows, companyName);
 });

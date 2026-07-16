@@ -1,11 +1,27 @@
 import { describe, expect, it } from "vitest";
+import { buildCompanyEvidenceFromRows } from "@/lib/companyAggregates";
 import {
   buildCompanyEvidenceHints,
   computeCompanyMomentum,
 } from "@/lib/companyEvidenceMath";
-import { parseTechStackField } from "@/lib/parseJobFields";
+import type { CompanyJobAggregateRow } from "@/lib/companyJobRows";
 
 const MS_DAY = 24 * 60 * 60 * 1000;
+
+function row(
+  partial: Partial<CompanyJobAggregateRow> & { post_at: string | null },
+): CompanyJobAggregateRow {
+  return {
+    job_id: partial.job_id ?? "j1",
+    level: partial.level ?? "senior",
+    location_remote: partial.location_remote ?? 0,
+    location_visa_supported: partial.location_visa_supported ?? 0,
+    salary_min: partial.salary_min ?? null,
+    salary_max: partial.salary_max ?? null,
+    post_at: partial.post_at,
+    tech_stack: partial.tech_stack ?? null,
+  };
+}
 
 describe("computeCompanyMomentum", () => {
   const now = Date.UTC(2026, 6, 15); // 2026-07-15
@@ -58,20 +74,41 @@ describe("buildCompanyEvidenceHints", () => {
   });
 });
 
-describe("company evidence stack parsing", () => {
-  it("aggregates job tech stacks via parseTechStackField", () => {
-    const jobs = ['["Python","React"]', '["Python","Go"]', "[]", null];
-    const map = new Map<string, number>();
-    let withStack = 0;
-    for (const raw of jobs) {
-      const stack = parseTechStackField(raw);
-      if (stack.length === 0) continue;
-      withStack += 1;
-      for (const tech of stack) {
-        map.set(tech, (map.get(tech) || 0) + 1);
-      }
-    }
-    expect(withStack).toBe(2);
-    expect(map.get("Python")).toBe(2);
+describe("buildCompanyEvidenceFromRows", () => {
+  const now = Date.UTC(2026, 6, 15);
+
+  it("aggregates job tech stacks and coverage via the production path", () => {
+    const rows = [
+      row({
+        job_id: "a",
+        post_at: new Date(now - 5 * MS_DAY).toISOString(),
+        tech_stack: '["Python","React"]',
+        salary_min: 100,
+        location_remote: 1,
+      }),
+      row({
+        job_id: "b",
+        post_at: new Date(now - 20 * MS_DAY).toISOString(),
+        tech_stack: '["Python","Go"]',
+        level: "mid",
+      }),
+      row({
+        job_id: "c",
+        post_at: new Date(now - 40 * MS_DAY).toISOString(),
+        tech_stack: "[]",
+        level: "unknown",
+      }),
+    ];
+
+    const evidence = buildCompanyEvidenceFromRows(rows, "HN", now);
+    expect(evidence.sampleSize).toBe(3);
+    expect(evidence.coverage.techStack).toBe(67);
+    expect(evidence.coverage.salary).toBe(33);
+    expect(evidence.coverage.remote).toBe(33);
+    expect(evidence.jobTechStack.find((t) => t.tech === "Python")?.count).toBe(
+      2,
+    );
+    expect(evidence.momentum.jobs30d).toBe(2);
+    expect(evidence.momentum.jobsPrev30d).toBe(1);
   });
 });

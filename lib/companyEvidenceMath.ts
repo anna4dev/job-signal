@@ -2,6 +2,7 @@ import type { CompanyEvidence, CompanyMomentum } from "@/types/company";
 
 const MS_DAY = 24 * 60 * 60 * 1000;
 
+/** Count timestamps in the half-open interval [startMs, endMs). */
 function countInRange(
   times: number[],
   startMs: number,
