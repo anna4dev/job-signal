@@ -7,14 +7,25 @@ export type CompanyEventType =
   | "bookmark_remove"
   | "apply_click";
 
-export type CompanyEventPayload = {
+type CompanyEventBase = {
   company_id: string;
-  /** Required except for `page_view`. */
-  job_id?: string | null;
-  event_type: CompanyEventType;
   /** 0-based position in the company jobs list (when applicable). */
   position?: number | null;
 };
+
+/** Page view has no required job_id. */
+export type CompanyPageViewEvent = CompanyEventBase & {
+  event_type: "page_view";
+  job_id?: string | null;
+};
+
+/** Job-scoped events require a non-empty job_id at compile time. */
+export type CompanyJobScopedEvent = CompanyEventBase & {
+  event_type: "job_click" | "bookmark_add" | "bookmark_remove" | "apply_click";
+  job_id: string;
+};
+
+export type CompanyEventPayload = CompanyPageViewEvent | CompanyJobScopedEvent;
 
 /**
  * Fire-and-forget company-page observability events (Phase B).
