@@ -212,7 +212,8 @@ export async function getCompanyJobs(
         salary_min,
         salary_max,
         post_at,
-        tech_stack
+        tech_stack,
+        jd_url
       FROM jobs_structured
       WHERE company_id = ?
       ORDER BY post_at DESC
@@ -236,6 +237,7 @@ export async function getCompanyJobs(
       salary_max: r.salary_max == null ? null : asNumber(r.salary_max),
       post_at: postAt ? new Date(postAt).toISOString().slice(0, 10) : postAt,
       tech_stack: asNullableString(r.tech_stack),
+      jd_url: asNullableString(r.jd_url),
     };
   });
 }
