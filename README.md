@@ -371,6 +371,8 @@ Measurement note: activation/quality targets and exact numeric thresholds are de
 
 Anonymous / placeholder names (`Anonymous`, `Stealth`, `Confidential`, …) are never indexable. Thin companies remain reachable from job links with `noindex,follow`. Sitemap still lists only gate-passing companies (notify/Indexing API does not replace this).
 
+Interim read path: list/sitemap use SQL pre-filters + a short TTL aggregate snapshot in `lib/companies.ts`, then apply the full gate in memory. See **Appendix: Company Index Snapshot Backlog** for the job-seeker–owned precompute plan.
+
 Exit criteria:
 - `company -> job` CTR >= target for 2 consecutive weeks.
 - Company page render success rate meets production reliability target.
@@ -443,6 +445,16 @@ _Goal: Proactive engagement on top of stable fit quality._
 
 - [ ] **5.1 Match Alerts**
 - Cron job executes fit and sends notifications.
+
+## Appendix: Company Index Snapshot Backlog
+
+_Owned by job-seeker write path; job-signal only consumes when ready._
+
+- [ ] **Precompute `company_index_snapshot` (or equivalent) in job-seeker**
+- Persist full indexing-gate result (`indexable`, including non-adjacent months) plus list fields (`company_name`, `industry`, `size`, `funding_stage`, `job_count`, `last_post_at`, `computed_at`).
+- Refresh on job ingest / structured write (incremental by `company_id`); optional periodic full rebuild as safety net.
+- job-signal then switches `listIndexableCompanies` / sitemap to read the snapshot (`WHERE indexable = 1`) instead of join + in-memory gate.
+- Gate semantics must stay equivalent to `lib/companyIndexable.ts`.
 
 ## Appendix: Design Ops Backlog
 
