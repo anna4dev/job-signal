@@ -1,37 +1,15 @@
 import { cache } from "react";
 import { db } from "@/lib/db";
-import {
-  isCompanyIndexable,
-} from "@/lib/companyIndexable";
+import { isCompanyIndexable } from "@/lib/companyIndexable";
 import { buildCompanyQuickStatsFromRows } from "@/lib/companyAggregates";
 import { loadCompanyJobAggregateRows } from "@/lib/companyJobRows";
+import { asNullableString, asNumber, asString } from "@/lib/dbCoerce";
 import type {
   CompanyDetail,
   CompanyJobSnapshot,
   CompanyListItem,
   CompanyQuickStats,
 } from "@/types/company";
-
-/** Coerce unknown DB values to string (empty when nullish). */
-function asString(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (value == null) return "";
-  return String(value);
-}
-
-/** Coerce unknown DB values to string or null. */
-function asNullableString(value: unknown): string | null {
-  if (value == null) return null;
-  if (typeof value === "string") return value;
-  return String(value);
-}
-
-/** Coerce unknown DB values to a finite number (0 when invalid). */
-function asNumber(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
-}
 
 /** Parse a GROUP_CONCAT months CSV into a trimmed string list. */
 function parseMonthsCsv(raw: unknown): string[] {
@@ -53,26 +31,60 @@ type CompanyAggRow = {
   posting_months: string[];
 };
 
-/** Load companies with >2 jobs and their posting-month aggregates. */
-async function loadCompanyAggregates(): Promise<CompanyAggRow[]> {
-  const result = await db.execute(`
-    SELECT
-      c.company_id,
-      c.company_name,
-      c.industry,
-      c.size,
-      c.funding_stage,
-      COUNT(j.job_id) AS job_count,
-      MAX(j.post_at) AS last_post_at,
-      GROUP_CONCAT(DISTINCT strftime('%Y-%m', j.post_at)) AS posting_months
-    FROM company_structured c
-    INNER JOIN jobs_structured j ON j.company_id = c.company_id
-    GROUP BY c.company_id
-    HAVING COUNT(j.job_id) > 2
-    ORDER BY MAX(j.post_at) DESC
-  `);
+/** Aligns with common `isAnonymousCompanyName` placeholders (SQL pre-filter). */
+const SQL_PLACEHOLDER_NAMES = [
+  "anonymous",
+  "stealth",
+  "confidential",
+  "unknown",
+  "n/a",
+  "na",
+  "none",
+] as const;
 
-  return result.rows.map((row) => {
+/** Short TTL so list + sitemap share work without unbounded per-request scans. */
+const AGGREGATE_TTL_MS = 5 * 60 * 1000;
+let aggregateSnapshot: { at: number; rows: CompanyAggRow[] } | null = null;
+
+/**
+ * Load companies that already pass cheap SQL gates (job_count > 2, >1 posting
+ * month, non-placeholder name). Full indexability (non-adjacent months) is
+ * applied in memory. Snapshot is TTL-cached across requests.
+ */
+async function loadCompanyAggregates(): Promise<CompanyAggRow[]> {
+  const now = Date.now();
+  if (
+    aggregateSnapshot &&
+    now - aggregateSnapshot.at < AGGREGATE_TTL_MS
+  ) {
+    return aggregateSnapshot.rows;
+  }
+
+  const placeholders = SQL_PLACEHOLDER_NAMES.map(() => "?").join(",");
+  const result = await db.execute({
+    sql: `
+      SELECT
+        c.company_id,
+        c.company_name,
+        c.industry,
+        c.size,
+        c.funding_stage,
+        COUNT(j.job_id) AS job_count,
+        MAX(j.post_at) AS last_post_at,
+        GROUP_CONCAT(DISTINCT strftime('%Y-%m', j.post_at)) AS posting_months
+      FROM company_structured c
+      INNER JOIN jobs_structured j ON j.company_id = c.company_id
+      WHERE TRIM(c.company_name) != ''
+        AND LOWER(TRIM(c.company_name)) NOT IN (${placeholders})
+      GROUP BY c.company_id
+      HAVING COUNT(j.job_id) > 2
+        AND COUNT(DISTINCT strftime('%Y-%m', j.post_at)) > 1
+      ORDER BY MAX(j.post_at) DESC
+    `,
+    args: [...SQL_PLACEHOLDER_NAMES],
+  });
+
+  const rows = result.rows.map((row) => {
     const r = row as Record<string, unknown>;
     return {
       company_id: asString(r.company_id),
@@ -85,6 +97,9 @@ async function loadCompanyAggregates(): Promise<CompanyAggRow[]> {
       posting_months: parseMonthsCsv(r.posting_months),
     };
   });
+
+  aggregateSnapshot = { at: now, rows };
+  return rows;
 }
 
 /**
