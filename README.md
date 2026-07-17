@@ -211,15 +211,15 @@ Each job page includes:
 
 6.  company_events
 
-    | Field | Type | Description |
-    | :--- | :--- | :--- |
-    | id | TEXT | Primary key. |
-    | anonymous_id | TEXT | Client-generated UUID (`job_signal_anonymous_id_v1`). |
-    | company_id | TEXT | FK to `company_structured.company_id`. |
-    | job_id | TEXT | FK to `jobs_structured.job_id` (nullable for `page_view`). |
-    | event_type | TEXT | `page_view`, `job_click`, `bookmark_add`, `bookmark_remove`, or `apply_click`. |
-    | position | INTEGER | 0-based position in the company jobs list. |
-    | created_at | DATETIME | Record creation time. |
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| id | TEXT | Primary key. |
+| anonymous_id | TEXT | Client-generated UUID (`job_signal_anonymous_id_v1`). |
+| company_id | TEXT | FK to `company_structured.company_id`. |
+| job_id | TEXT | FK to `jobs_structured.job_id` (nullable for `page_view`). |
+| event_type | TEXT | `page_view`, `job_click`, `bookmark_add`, `bookmark_remove`, or `apply_click`. |
+| position | INTEGER | 0-based position in the company jobs list. |
+| created_at | DATETIME | Record creation time. |
 
     **Turso migration (required before `/api/company-events` writes):** run once in the Turso console.
 

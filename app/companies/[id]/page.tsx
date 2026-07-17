@@ -58,6 +58,9 @@ function parseSourceLinks(raw: string | null): {
   }
 }
 
+/**
+ * Next.js metadata for a company detail page (title, robots, canonical).
+ */
 export async function generateMetadata({
   params,
 }: {
@@ -85,6 +88,9 @@ export async function generateMetadata({
   };
 }
 
+/**
+ * Company detail page: Hero, Quick Decision, Evidence, Trend, Jobs, Footer.
+ */
 export default async function CompanyDetailPage({
   params,
 }: {

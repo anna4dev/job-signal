@@ -12,24 +12,28 @@ import type {
   CompanyQuickStats,
 } from "@/types/company";
 
+/** Coerce unknown DB values to string (empty when nullish). */
 function asString(value: unknown): string {
   if (typeof value === "string") return value;
   if (value == null) return "";
   return String(value);
 }
 
+/** Coerce unknown DB values to string or null. */
 function asNullableString(value: unknown): string | null {
   if (value == null) return null;
   if (typeof value === "string") return value;
   return String(value);
 }
 
+/** Coerce unknown DB values to a finite number (0 when invalid). */
 function asNumber(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Parse a GROUP_CONCAT months CSV into a trimmed string list. */
 function parseMonthsCsv(raw: unknown): string[] {
   if (typeof raw !== "string" || !raw.trim()) return [];
   return raw
@@ -49,6 +53,7 @@ type CompanyAggRow = {
   posting_months: string[];
 };
 
+/** Load companies with >2 jobs and their posting-month aggregates. */
 async function loadCompanyAggregates(): Promise<CompanyAggRow[]> {
   const result = await db.execute(`
     SELECT
@@ -82,6 +87,9 @@ async function loadCompanyAggregates(): Promise<CompanyAggRow[]> {
   });
 }
 
+/**
+ * Paginated list of indexable companies (SEO gate), optionally filtered by q.
+ */
 export async function listIndexableCompanies(opts: {
   page: number;
   pageSize: number;
@@ -127,6 +135,7 @@ export async function listIndexableCompanies(opts: {
   return { total, companies };
 }
 
+/** Indexable company ids + last_modified for sitemap generation. */
 export async function listIndexableCompanyIdsForSitemap(limit = 500): Promise<
   { company_id: string; last_modified: Date }[]
 > {
@@ -147,6 +156,7 @@ export async function listIndexableCompanyIdsForSitemap(limit = 500): Promise<
   }));
 }
 
+/** Company profile row from company_structured (cached per request). */
 export const getCompanyDetail = cache(async function getCompanyDetail(
   companyId: string,
 ): Promise<CompanyDetail | null> {
@@ -196,6 +206,7 @@ export const getCompanyDetail = cache(async function getCompanyDetail(
   };
 });
 
+/** Recent jobs for a company detail jobs zone (includes jd_url for apply). */
 export async function getCompanyJobs(
   companyId: string,
   limit = 50,
@@ -243,6 +254,10 @@ export async function getCompanyJobs(
   });
 }
 
+/**
+ * Quick Decision stats for a company page. Reuses the cached job-row fetch
+ * shared with getCompanyEvidence.
+ */
 export const getCompanyQuickStats = cache(async function getCompanyQuickStats(
   companyId: string,
   companyName: string,
