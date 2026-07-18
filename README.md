@@ -209,6 +209,61 @@ Each job page includes:
     GROUP BY sort_mode;
     ```
 
+6.  company_events
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| id | TEXT | Primary key. |
+| anonymous_id | TEXT | Client-generated UUID (`job_signal_anonymous_id_v1`). |
+| company_id | TEXT | FK to `company_structured.company_id`. |
+| job_id | TEXT | FK to `jobs_structured.job_id` (nullable for `page_view`). |
+| event_type | TEXT | `page_view`, `job_click`, `bookmark_add`, `bookmark_remove`, or `apply_click`. |
+| position | INTEGER | 0-based position in the company jobs list. |
+| created_at | DATETIME | Record creation time. |
+
+    **Turso migration (required before `/api/company-events` writes):** run once in the Turso console.
+
+    ```sql
+    CREATE TABLE IF NOT EXISTS company_events (
+      id TEXT PRIMARY KEY,
+      anonymous_id TEXT NOT NULL,
+      company_id TEXT NOT NULL,
+      job_id TEXT,
+      event_type TEXT NOT NULL CHECK (
+        event_type IN (
+          'page_view','job_click','bookmark_add','bookmark_remove','apply_click'
+        )
+      ),
+      position INTEGER,
+      created_at DATETIME DEFAULT (datetime('now')),
+      FOREIGN KEY (company_id) REFERENCES company_structured(company_id),
+      FOREIGN KEY (job_id) REFERENCES jobs_structured(job_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_company_events_anon_created
+    ON company_events (anonymous_id, created_at);
+
+    CREATE INDEX IF NOT EXISTS idx_company_events_company_type_created
+    ON company_events (company_id, event_type, created_at);
+    ```
+
+    Monitoring only — used for Phase B exit metrics (second-click, bookmark/apply from company pages). Example funnel:
+
+    ```sql
+    SELECT
+      company_id,
+      SUM(event_type = 'page_view') AS page_views,
+      SUM(event_type = 'job_click') AS job_clicks,
+      SUM(event_type = 'bookmark_add') AS bookmarks,
+      SUM(event_type = 'apply_click') AS applies,
+      ROUND(1.0 * SUM(event_type = 'job_click') / NULLIF(SUM(event_type = 'page_view'), 0), 3) AS second_click_rate
+    FROM company_events
+    WHERE created_at >= datetime('now', '-14 day')
+    GROUP BY company_id
+    ORDER BY page_views DESC
+    LIMIT 50;
+    ```
+
 ## Environment Variables
 
 Configure your `.env` file as follows:
@@ -316,6 +371,8 @@ Measurement note: activation/quality targets and exact numeric thresholds are de
 
 Anonymous / placeholder names (`Anonymous`, `Stealth`, `Confidential`, …) are never indexable. Thin companies remain reachable from job links with `noindex,follow`. Sitemap still lists only gate-passing companies (notify/Indexing API does not replace this).
 
+Interim read path: list/sitemap use SQL pre-filters + a short TTL aggregate snapshot in `lib/companies.ts`, then apply the full gate in memory. See **Appendix: Company Index Snapshot Backlog** for the job-seeker–owned precompute plan.
+
 Exit criteria:
 - `company -> job` CTR >= target for 2 consecutive weeks.
 - Company page render success rate meets production reliability target.
@@ -324,9 +381,15 @@ Exit criteria:
 
 #### Phase B: Apply Intelligence (v2)
 
-- Add evidence-first decision signals: 30/90-day momentum, role/level mix, remote/visa/salary coverage, and baseline tech-stack coverage.
-- Enabled UI blocks: Evidence & Sources Zone, Trend Zone.
+- [x] Add evidence-first decision signals: 30/90-day momentum, role/level mix, remote/visa/salary coverage, and baseline tech-stack coverage (job-derived).
+- [x] Enabled UI blocks: Evidence & Sources Zone, Trend Zone.
+- [x] Company-page observability: `page_view` / `job_click` / `bookmark_*` / `apply_click` via `company_events` + `POST /api/company-events`.
 - Implementation principle: prioritize reuse; do not block delivery.
+
+**Measurability** (after Turso migration for `company_events`):
+- Second-click rate: `job_click / page_view` per company (or site-wide).
+- Bookmark / apply from company: `bookmark_add` and `apply_click` divided by `page_view` or `job_click`.
+- Module coverage is rendered per company (Evidence zone) and queryable from `jobs_structured` aggregates.
 
 Exit criteria:
 - Company-page second-click rate >= target for 2 consecutive weeks.
@@ -360,7 +423,7 @@ Trigger conditions:
 ### Company Detail Structure (Reference)
 
 - **v1 sections**: Hero, Quick Decision Zone (hiring/role/constraint snapshots), Company Jobs Zone (sortable/filterable with `company -> job` path), Page Footer Baseline (`last updated`, coverage, source disclosure, feedback).
-- **v2 sections**: Evidence & Sources Zone (sample size/time window/source list/coverage hints) and Trend Zone (momentum/role/stack trends + anomaly hints).
+- **v2 sections**: Evidence & Sources Zone (sample size/time window/source list/coverage hints) and Trend Zone (momentum/role/stack trends + anomaly hints). Wired in `app/companies/[id]/page.tsx` via `getCompanyEvidence`.
 - **v3 sections**: Long-Horizon Zone (trajectory timeline, peer comparison, signal consistency, optional lenses).
 
 ### Phase 4: Identity & Sync Layer
@@ -382,6 +445,16 @@ _Goal: Proactive engagement on top of stable fit quality._
 
 - [ ] **5.1 Match Alerts**
 - Cron job executes fit and sends notifications.
+
+## Appendix: Company Index Snapshot Backlog
+
+_Owned by job-seeker write path; job-signal only consumes when ready._
+
+- [ ] **Precompute `company_index_snapshot` (or equivalent) in job-seeker**
+- Persist full indexing-gate result (`indexable`, including non-adjacent months) plus list fields (`company_name`, `industry`, `size`, `funding_stage`, `job_count`, `last_post_at`, `computed_at`).
+- Refresh on job ingest / structured write (incremental by `company_id`); optional periodic full rebuild as safety net.
+- job-signal then switches `listIndexableCompanies` / sitemap to read the snapshot (`WHERE indexable = 1`) instead of join + in-memory gate.
+- Gate semantics must stay equivalent to `lib/companyIndexable.ts`.
 
 ## Appendix: Design Ops Backlog
 

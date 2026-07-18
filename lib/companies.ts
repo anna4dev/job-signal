@@ -1,9 +1,9 @@
 import { cache } from "react";
 import { db } from "@/lib/db";
-import {
-  isCompanyIndexable,
-  toYearMonth,
-} from "@/lib/companyIndexable";
+import { isCompanyIndexable } from "@/lib/companyIndexable";
+import { buildCompanyQuickStatsFromRows } from "@/lib/companyAggregates";
+import { loadCompanyJobAggregateRows } from "@/lib/companyJobRows";
+import { asNullableString, asNumber, asString } from "@/lib/dbCoerce";
 import type {
   CompanyDetail,
   CompanyJobSnapshot,
@@ -11,24 +11,7 @@ import type {
   CompanyQuickStats,
 } from "@/types/company";
 
-function asString(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (value == null) return "";
-  return String(value);
-}
-
-function asNullableString(value: unknown): string | null {
-  if (value == null) return null;
-  if (typeof value === "string") return value;
-  return String(value);
-}
-
-function asNumber(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
-}
-
+/** Parse a GROUP_CONCAT months CSV into a trimmed string list. */
 function parseMonthsCsv(raw: unknown): string[] {
   if (typeof raw !== "string" || !raw.trim()) return [];
   return raw
@@ -48,25 +31,60 @@ type CompanyAggRow = {
   posting_months: string[];
 };
 
-async function loadCompanyAggregates(): Promise<CompanyAggRow[]> {
-  const result = await db.execute(`
-    SELECT
-      c.company_id,
-      c.company_name,
-      c.industry,
-      c.size,
-      c.funding_stage,
-      COUNT(j.job_id) AS job_count,
-      MAX(j.post_at) AS last_post_at,
-      GROUP_CONCAT(DISTINCT strftime('%Y-%m', j.post_at)) AS posting_months
-    FROM company_structured c
-    INNER JOIN jobs_structured j ON j.company_id = c.company_id
-    GROUP BY c.company_id
-    HAVING COUNT(j.job_id) > 2
-    ORDER BY MAX(j.post_at) DESC
-  `);
+/** Aligns with common `isAnonymousCompanyName` placeholders (SQL pre-filter). */
+const SQL_PLACEHOLDER_NAMES = [
+  "anonymous",
+  "stealth",
+  "confidential",
+  "unknown",
+  "n/a",
+  "na",
+  "none",
+] as const;
 
-  return result.rows.map((row) => {
+/** Short TTL so list + sitemap share work without unbounded per-request scans. */
+const AGGREGATE_TTL_MS = 5 * 60 * 1000;
+let aggregateSnapshot: { at: number; rows: CompanyAggRow[] } | null = null;
+
+/**
+ * Load companies that already pass cheap SQL gates (job_count > 2, >1 posting
+ * month, non-placeholder name). Full indexability (non-adjacent months) is
+ * applied in memory. Snapshot is TTL-cached across requests.
+ */
+async function loadCompanyAggregates(): Promise<CompanyAggRow[]> {
+  const now = Date.now();
+  if (
+    aggregateSnapshot &&
+    now - aggregateSnapshot.at < AGGREGATE_TTL_MS
+  ) {
+    return aggregateSnapshot.rows;
+  }
+
+  const placeholders = SQL_PLACEHOLDER_NAMES.map(() => "?").join(",");
+  const result = await db.execute({
+    sql: `
+      SELECT
+        c.company_id,
+        c.company_name,
+        c.industry,
+        c.size,
+        c.funding_stage,
+        COUNT(j.job_id) AS job_count,
+        MAX(j.post_at) AS last_post_at,
+        GROUP_CONCAT(DISTINCT strftime('%Y-%m', j.post_at)) AS posting_months
+      FROM company_structured c
+      INNER JOIN jobs_structured j ON j.company_id = c.company_id
+      WHERE TRIM(c.company_name) != ''
+        AND LOWER(TRIM(c.company_name)) NOT IN (${placeholders})
+      GROUP BY c.company_id
+      HAVING COUNT(j.job_id) > 2
+        AND COUNT(DISTINCT strftime('%Y-%m', j.post_at)) > 1
+      ORDER BY MAX(j.post_at) DESC
+    `,
+    args: [...SQL_PLACEHOLDER_NAMES],
+  });
+
+  const rows = result.rows.map((row) => {
     const r = row as Record<string, unknown>;
     return {
       company_id: asString(r.company_id),
@@ -79,8 +97,14 @@ async function loadCompanyAggregates(): Promise<CompanyAggRow[]> {
       posting_months: parseMonthsCsv(r.posting_months),
     };
   });
+
+  aggregateSnapshot = { at: now, rows };
+  return rows;
 }
 
+/**
+ * Paginated list of indexable companies (SEO gate), optionally filtered by q.
+ */
 export async function listIndexableCompanies(opts: {
   page: number;
   pageSize: number;
@@ -126,6 +150,7 @@ export async function listIndexableCompanies(opts: {
   return { total, companies };
 }
 
+/** Indexable company ids + last_modified for sitemap generation. */
 export async function listIndexableCompanyIdsForSitemap(limit = 500): Promise<
   { company_id: string; last_modified: Date }[]
 > {
@@ -146,6 +171,7 @@ export async function listIndexableCompanyIdsForSitemap(limit = 500): Promise<
   }));
 }
 
+/** Company profile row from company_structured (cached per request). */
 export const getCompanyDetail = cache(async function getCompanyDetail(
   companyId: string,
 ): Promise<CompanyDetail | null> {
@@ -195,6 +221,7 @@ export const getCompanyDetail = cache(async function getCompanyDetail(
   };
 });
 
+/** Recent jobs for a company detail jobs zone (includes jd_url for apply). */
 export async function getCompanyJobs(
   companyId: string,
   limit = 50,
@@ -212,7 +239,8 @@ export async function getCompanyJobs(
         salary_min,
         salary_max,
         post_at,
-        tech_stack
+        tech_stack,
+        jd_url
       FROM jobs_structured
       WHERE company_id = ?
       ORDER BY post_at DESC
@@ -236,87 +264,19 @@ export async function getCompanyJobs(
       salary_max: r.salary_max == null ? null : asNumber(r.salary_max),
       post_at: postAt ? new Date(postAt).toISOString().slice(0, 10) : postAt,
       tech_stack: asNullableString(r.tech_stack),
+      jd_url: asNullableString(r.jd_url),
     };
   });
 }
 
+/**
+ * Quick Decision stats for a company page. Reuses the cached job-row fetch
+ * shared with getCompanyEvidence.
+ */
 export const getCompanyQuickStats = cache(async function getCompanyQuickStats(
   companyId: string,
   companyName: string,
 ): Promise<CompanyQuickStats> {
-  const result = await db.execute({
-    sql: `
-      SELECT
-        job_id,
-        level,
-        location_remote,
-        location_visa_supported,
-        salary_min,
-        salary_max,
-        post_at
-      FROM jobs_structured
-      WHERE company_id = ?
-      ORDER BY post_at DESC
-    `,
-    args: [companyId],
-  });
-
-  const rows = result.rows as Record<string, unknown>[];
-  const jobCount = rows.length;
-  const postingMonths = rows
-    .map((r) => toYearMonth(asNullableString(r.post_at)))
-    .filter((m): m is string => !!m);
-
-  const remoteCount = rows.filter((r) => asNumber(r.location_remote) === 1)
-    .length;
-  const visaCount = rows.filter(
-    (r) => asNumber(r.location_visa_supported) === 1,
-  ).length;
-  const salaryCount = rows.filter(
-    (r) => r.salary_min != null || r.salary_max != null,
-  ).length;
-
-  const levelMap = new Map<string, number>();
-  for (const r of rows) {
-    const level = asString(r.level) || "unknown";
-    levelMap.set(level, (levelMap.get(level) || 0) + 1);
-  }
-  const topLevels = Array.from(levelMap.entries())
-    .map(([level, count]) => ({ level, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 4);
-
-  const postTimes = rows
-    .map((r) => asNullableString(r.post_at))
-    .filter((v): v is string => !!v)
-    .map((v) => new Date(v).getTime())
-    .filter((t) => Number.isFinite(t))
-    .sort((a, b) => a - b);
-
-  const firstPostAt =
-    postTimes.length > 0 ? new Date(postTimes[0]).toISOString() : null;
-  const lastPostAt =
-    postTimes.length > 0
-      ? new Date(postTimes[postTimes.length - 1]).toISOString()
-      : null;
-
-  const share = (n: number) =>
-    jobCount === 0 ? null : Math.round((n / jobCount) * 100);
-
-  return {
-    jobCount,
-    openRolesSample: Math.min(jobCount, 50),
-    remoteShare: share(remoteCount),
-    visaShare: share(visaCount),
-    salaryCoverage: share(salaryCount),
-    topLevels,
-    postingMonths: Array.from(new Set(postingMonths)).sort(),
-    firstPostAt,
-    lastPostAt,
-    indexable: isCompanyIndexable({
-      companyName,
-      jobCount,
-      postingMonths,
-    }),
-  };
+  const rows = await loadCompanyJobAggregateRows(companyId);
+  return buildCompanyQuickStatsFromRows(rows, companyName);
 });

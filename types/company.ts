@@ -38,6 +38,45 @@ export type CompanyJobSnapshot = {
   salary_max: number | null;
   post_at: string;
   tech_stack: string | null;
+  jd_url: string | null;
+};
+
+/** Rolling hiring momentum over 30/90-day windows (Phase B). */
+export type CompanyMomentum = {
+  jobs30d: number;
+  jobs90d: number;
+  /** Posts in the prior 30d window (day −60 … −30). */
+  jobsPrev30d: number;
+  /** Posts in the prior 90d window (day −180 … −90). */
+  jobsPrev90d: number;
+  /** jobs30d − jobsPrev30d; null when both windows empty. */
+  delta30d: number | null;
+  /** jobs90d − jobsPrev90d; null when both windows empty. */
+  delta90d: number | null;
+};
+
+/** Evidence-first decision signals for company detail (Phase B). */
+export type CompanyEvidence = {
+  sampleSize: number;
+  windowLabel: string;
+  firstPostAt: string | null;
+  lastPostAt: string | null;
+  postingMonthCount: number;
+  sources: string[];
+  coverage: {
+    remote: number | null;
+    visa: number | null;
+    salary: number | null;
+    /** Share of jobs with a non-empty parsed tech_stack. */
+    techStack: number | null;
+    /** Share of jobs with a known level (not `unknown`). */
+    level: number | null;
+  };
+  levelMix: { level: string; count: number; share: number }[];
+  /** Top technologies aggregated from job-level tech_stack. */
+  jobTechStack: { tech: string; count: number }[];
+  momentum: CompanyMomentum;
+  hints: string[];
 };
 
 export type CompanyQuickStats = {
