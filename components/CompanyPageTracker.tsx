@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect } from "react";
-import { trackCompanyEvents } from "@/lib/companyEvents";
+import {
+  rememberCompanyVisit,
+  trackCompanyEvents,
+} from "@/lib/companyEvents";
 
 /**
- * Fires a single company page_view on mount for Phase B measurability.
+ * Fires page_view on mount, and revisit when the same company was viewed
+ * more than 24h ago (Phase C 7-day revisit funnel support).
  */
 export default function CompanyPageTracker({
   companyId,
@@ -12,9 +16,14 @@ export default function CompanyPageTracker({
   companyId: string;
 }) {
   useEffect(() => {
-    trackCompanyEvents([
-      { company_id: companyId, event_type: "page_view" },
-    ]);
+    const { isRevisit } = rememberCompanyVisit(companyId);
+    const events = [
+      { company_id: companyId, event_type: "page_view" as const },
+      ...(isRevisit
+        ? [{ company_id: companyId, event_type: "revisit" as const }]
+        : []),
+    ];
+    trackCompanyEvents(events);
   }, [companyId]);
 
   return null;
