@@ -216,12 +216,15 @@ Each job page includes:
 | id | TEXT | Primary key. |
 | anonymous_id | TEXT | Client-generated UUID (`job_signal_anonymous_id_v1`). |
 | company_id | TEXT | FK to `company_structured.company_id`. |
-| job_id | TEXT | FK to `jobs_structured.job_id` (nullable for `page_view`). |
-| event_type | TEXT | `page_view`, `job_click`, `bookmark_add`, `bookmark_remove`, or `apply_click`. |
-| position | INTEGER | 0-based position in the company jobs list. |
+| job_id | TEXT | FK to `jobs_structured.job_id` (nullable except job-scoped events). |
+| related_company_id | TEXT | Peer company id for `peer_click` (nullable otherwise). |
+| event_type | TEXT | `page_view`, `job_click`, `bookmark_add`, `bookmark_remove`, `apply_click`, `peer_click`, `trust_flag`, `revisit`, or `long_horizon_view`. |
+| position | INTEGER | 0-based position in the company jobs or peer list. |
 | created_at | DATETIME | Record creation time. |
 
     **Turso migration (required before `/api/company-events` writes):** run once in the Turso console.
+
+    If you already created `company_events` without Phase C columns/types, recreate (or migrate) before deploying:
 
     ```sql
     CREATE TABLE IF NOT EXISTS company_events (
@@ -229,15 +232,18 @@ Each job page includes:
       anonymous_id TEXT NOT NULL,
       company_id TEXT NOT NULL,
       job_id TEXT,
+      related_company_id TEXT,
       event_type TEXT NOT NULL CHECK (
         event_type IN (
-          'page_view','job_click','bookmark_add','bookmark_remove','apply_click'
+          'page_view','job_click','bookmark_add','bookmark_remove','apply_click',
+          'peer_click','trust_flag','revisit','long_horizon_view'
         )
       ),
       position INTEGER,
       created_at DATETIME DEFAULT (datetime('now')),
       FOREIGN KEY (company_id) REFERENCES company_structured(company_id),
-      FOREIGN KEY (job_id) REFERENCES jobs_structured(job_id)
+      FOREIGN KEY (job_id) REFERENCES jobs_structured(job_id),
+      FOREIGN KEY (related_company_id) REFERENCES company_structured(company_id)
     );
 
     CREATE INDEX IF NOT EXISTS idx_company_events_anon_created
@@ -247,7 +253,7 @@ Each job page includes:
     ON company_events (company_id, event_type, created_at);
     ```
 
-    Monitoring only — used for Phase B exit metrics (second-click, bookmark/apply from company pages). Example funnel:
+    Monitoring only — used for Phase B/C exit metrics. Example funnel:
 
     ```sql
     SELECT
@@ -256,6 +262,9 @@ Each job page includes:
       SUM(event_type = 'job_click') AS job_clicks,
       SUM(event_type = 'bookmark_add') AS bookmarks,
       SUM(event_type = 'apply_click') AS applies,
+      SUM(event_type = 'revisit') AS revisits,
+      SUM(event_type = 'peer_click') AS peer_clicks,
+      SUM(event_type = 'trust_flag') AS trust_flags,
       ROUND(1.0 * SUM(event_type = 'job_click') / NULLIF(SUM(event_type = 'page_view'), 0), 3) AS second_click_rate
     FROM company_events
     WHERE created_at >= datetime('now', '-14 day')
@@ -398,18 +407,21 @@ Exit criteria:
 
 #### Phase C: Career Risk & Trajectory (v3)
 
-- Add long-horizon context: trajectory timeline, signal-consistency view, and same-lane peer comparison (3-5 companies).
-- Enabled UI block: Long-Horizon Zone.
+- [x] Add long-horizon context: trajectory timeline, signal-consistency view, and same-lane peer comparison (3-5 companies).
+- [x] Enabled UI block: Long-Horizon Zone (`CompanyLongHorizonZone` via `getCompanyLongHorizon`).
+- [x] Phase C observability: `revisit`, `peer_click`, `trust_flag`, `long_horizon_view` on `company_events` (requires Turso schema update above).
 
 Boundaries:
 - v3 default uses internal structured signals only (`HN + in-product structured data`).
 - External enrichment is out of scope for v3 and belongs to v4.
 - Do not output a single "apply/do-not-apply" conclusion.
 
+**Same-lane peers:** prefer shared `industry`, then `funding_stage`; require `job_count > 2`; show up to 5.
+
 Exit criteria:
-- Company-page 7-day revisit rate >= target for 2 consecutive weeks.
-- Peer-compare module usage is measurable and above activation threshold.
-- "Information not trustworthy" feedback rate stays below quality threshold.
+- Company-page 7-day revisit rate >= target for 2 consecutive weeks (`revisit` / distinct viewers).
+- Peer-compare module usage is measurable and above activation threshold (`peer_click`, `long_horizon_view`).
+- "Information not trustworthy" feedback rate stays below quality threshold (`trust_flag`).
 
 #### Optional Follow-up: External Evidence (v4, TBD)
 
@@ -424,7 +436,7 @@ Trigger conditions:
 
 - **v1 sections**: Hero, Quick Decision Zone (hiring/role/constraint snapshots), Company Jobs Zone (sortable/filterable with `company -> job` path), Page Footer Baseline (`last updated`, coverage, source disclosure, feedback).
 - **v2 sections**: Evidence & Sources Zone (sample size/time window/source list/coverage hints) and Trend Zone (momentum/role/stack trends + anomaly hints). Wired in `app/companies/[id]/page.tsx` via `getCompanyEvidence`.
-- **v3 sections**: Long-Horizon Zone (trajectory timeline, peer comparison, signal consistency, optional lenses).
+- **v3 sections**: Long-Horizon Zone (trajectory timeline, peer comparison, signal consistency, optional lenses). Wired via `getCompanyLongHorizon` / `CompanyLongHorizonZone`.
 
 ### Phase 4: Identity & Sync Layer
 
