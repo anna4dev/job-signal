@@ -222,56 +222,97 @@ Each job page includes:
 | position | INTEGER | 0-based position in the company jobs or peer list. |
 | created_at | DATETIME | Record creation time. |
 
-    **Turso migration (required before `/api/company-events` writes):** run once in the Turso console.
+**Turso migration (required before `/api/company-events` writes):**
 
-    If you already created `company_events` without Phase C columns/types, recreate (or migrate) before deploying:
+**Fresh install** — create the table:
 
-    ```sql
-    CREATE TABLE IF NOT EXISTS company_events (
-      id TEXT PRIMARY KEY,
-      anonymous_id TEXT NOT NULL,
-      company_id TEXT NOT NULL,
-      job_id TEXT,
-      related_company_id TEXT,
-      event_type TEXT NOT NULL CHECK (
-        event_type IN (
-          'page_view','job_click','bookmark_add','bookmark_remove','apply_click',
-          'peer_click','trust_flag','revisit','long_horizon_view'
-        )
-      ),
-      position INTEGER,
-      created_at DATETIME DEFAULT (datetime('now')),
-      FOREIGN KEY (company_id) REFERENCES company_structured(company_id),
-      FOREIGN KEY (job_id) REFERENCES jobs_structured(job_id),
-      FOREIGN KEY (related_company_id) REFERENCES company_structured(company_id)
-    );
+```sql
+CREATE TABLE IF NOT EXISTS company_events (
+  id TEXT PRIMARY KEY,
+  anonymous_id TEXT NOT NULL,
+  company_id TEXT NOT NULL,
+  job_id TEXT,
+  related_company_id TEXT,
+  event_type TEXT NOT NULL CHECK (
+    event_type IN (
+      'page_view','job_click','bookmark_add','bookmark_remove','apply_click',
+      'peer_click','trust_flag','revisit','long_horizon_view'
+    )
+  ),
+  position INTEGER,
+  created_at DATETIME DEFAULT (datetime('now')),
+  FOREIGN KEY (company_id) REFERENCES company_structured(company_id),
+  FOREIGN KEY (job_id) REFERENCES jobs_structured(job_id),
+  FOREIGN KEY (related_company_id) REFERENCES company_structured(company_id)
+);
 
-    CREATE INDEX IF NOT EXISTS idx_company_events_anon_created
-    ON company_events (anonymous_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_company_events_anon_created
+ON company_events (anonymous_id, created_at);
 
-    CREATE INDEX IF NOT EXISTS idx_company_events_company_type_created
-    ON company_events (company_id, event_type, created_at);
-    ```
+CREATE INDEX IF NOT EXISTS idx_company_events_company_type_created
+ON company_events (company_id, event_type, created_at);
+```
 
-    Monitoring only — used for Phase B/C exit metrics. Example funnel:
+**Existing Phase B table** — `CREATE TABLE IF NOT EXISTS` is a no-op and will not add `related_company_id` or expand the `event_type` CHECK. Rebuild (Turso / SQLite cannot ALTER CHECK in place):
 
-    ```sql
-    SELECT
-      company_id,
-      SUM(event_type = 'page_view') AS page_views,
-      SUM(event_type = 'job_click') AS job_clicks,
-      SUM(event_type = 'bookmark_add') AS bookmarks,
-      SUM(event_type = 'apply_click') AS applies,
-      SUM(event_type = 'revisit') AS revisits,
-      SUM(event_type = 'peer_click') AS peer_clicks,
-      SUM(event_type = 'trust_flag') AS trust_flags,
-      ROUND(1.0 * SUM(event_type = 'job_click') / NULLIF(SUM(event_type = 'page_view'), 0), 3) AS second_click_rate
-    FROM company_events
-    WHERE created_at >= datetime('now', '-14 day')
-    GROUP BY company_id
-    ORDER BY page_views DESC
-    LIMIT 50;
-    ```
+```sql
+ALTER TABLE company_events RENAME TO company_events_legacy;
+
+CREATE TABLE company_events (
+  id TEXT PRIMARY KEY,
+  anonymous_id TEXT NOT NULL,
+  company_id TEXT NOT NULL,
+  job_id TEXT,
+  related_company_id TEXT,
+  event_type TEXT NOT NULL CHECK (
+    event_type IN (
+      'page_view','job_click','bookmark_add','bookmark_remove','apply_click',
+      'peer_click','trust_flag','revisit','long_horizon_view'
+    )
+  ),
+  position INTEGER,
+  created_at DATETIME DEFAULT (datetime('now')),
+  FOREIGN KEY (company_id) REFERENCES company_structured(company_id),
+  FOREIGN KEY (job_id) REFERENCES jobs_structured(job_id),
+  FOREIGN KEY (related_company_id) REFERENCES company_structured(company_id)
+);
+
+INSERT INTO company_events (
+  id, anonymous_id, company_id, job_id, related_company_id, event_type, position, created_at
+)
+SELECT
+  id, anonymous_id, company_id, job_id, NULL, event_type, position, created_at
+FROM company_events_legacy;
+
+CREATE INDEX IF NOT EXISTS idx_company_events_anon_created
+ON company_events (anonymous_id, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_company_events_company_type_created
+ON company_events (company_id, event_type, created_at);
+
+DROP TABLE company_events_legacy;
+```
+
+Monitoring only — used for Phase B/C exit metrics. Example funnel:
+
+```sql
+SELECT
+  company_id,
+  SUM(event_type = 'page_view') AS page_views,
+  SUM(event_type = 'job_click') AS job_clicks,
+  SUM(event_type = 'bookmark_add') AS bookmarks,
+  SUM(event_type = 'apply_click') AS applies,
+  SUM(event_type = 'revisit') AS revisits,
+  SUM(event_type = 'peer_click') AS peer_clicks,
+  SUM(event_type = 'trust_flag') AS trust_flags,
+  SUM(event_type = 'long_horizon_view') AS long_horizon_views,
+  ROUND(1.0 * SUM(event_type = 'job_click') / NULLIF(SUM(event_type = 'page_view'), 0), 3) AS second_click_rate
+FROM company_events
+WHERE created_at >= datetime('now', '-14 day')
+GROUP BY company_id
+ORDER BY page_views DESC
+LIMIT 50;
+```
 
 ## Environment Variables
 
@@ -467,6 +508,7 @@ _Owned by job-seeker write path; job-signal only consumes when ready._
 - Refresh on job ingest / structured write (incremental by `company_id`); optional periodic full rebuild as safety net.
 - job-signal then switches `listIndexableCompanies` / sitemap to read the snapshot (`WHERE indexable = 1`) instead of join + in-memory gate.
 - Gate semantics must stay equivalent to `lib/companyIndexable.ts`.
+- [ ] **Persist normalized peer-lane keys at write time** (`industry_key` / `funding_key`, lower+trim) with indexes, so peer matching can use equality seeks instead of in-memory filters over the aggregate snapshot.
 
 ## Appendix: Design Ops Backlog
 
