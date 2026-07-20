@@ -1,6 +1,5 @@
 import { cache } from "react";
-import { db } from "@/lib/db";
-import { asNullableString, asNumber, asString } from "@/lib/dbCoerce";
+import { loadCompanyAggregates } from "@/lib/companies";
 import { loadCompanyJobAggregateRows } from "@/lib/companyJobRows";
 import {
   buildCompanySignalConsistency,
@@ -12,19 +11,27 @@ import type {
 } from "@/types/company";
 
 const PEER_LIMIT = 5;
-const PEER_CANDIDATE_LIMIT = 24;
+
+/** Normalize industry/funding labels for case/whitespace-insensitive lane match. */
+function laneKey(value: string | null | undefined): string {
+  return (value || "").trim().toLowerCase();
+}
 
 /**
- * Pick same-lane peers: prefer shared industry, then funding_stage.
- * Does not emit apply/do-not-apply judgments — comparison context only.
+ * Pick same-lane peers from the TTL-cached company aggregate snapshot.
+ * Prefer shared industry, then funding_stage. Avoids per-request
+ * LOWER(TRIM(...)) SQL scans on company_structured.
+ *
+ * Longer-term: job-seeker may persist indexed industry_key/funding_key columns
+ * (see README Company Index Snapshot / peer-lane backlog).
  */
 export async function listCompanyPeers(
   companyId: string,
   industry: string | null,
   fundingStage: string | null,
 ): Promise<{ peers: CompanyPeerSummary[]; laneLabel: string }> {
-  const industryKey = (industry || "").trim();
-  const fundingKey = (fundingStage || "").trim();
+  const industryKey = laneKey(industry);
+  const fundingKey = laneKey(fundingStage);
 
   if (!industryKey && !fundingKey) {
     return {
@@ -33,84 +40,58 @@ export async function listCompanyPeers(
     };
   }
 
-  const result = await db.execute({
-    sql: `
-      SELECT
-        c.company_id,
-        c.company_name,
-        c.industry,
-        c.size,
-        c.funding_stage,
-        COUNT(j.job_id) AS job_count,
-        MAX(j.post_at) AS last_post_at
-      FROM company_structured c
-      INNER JOIN jobs_structured j ON j.company_id = c.company_id
-      WHERE c.company_id != ?
-        AND (
-          (? != '' AND c.industry IS NOT NULL AND LOWER(TRIM(c.industry)) = LOWER(?))
-          OR (? != '' AND c.funding_stage IS NOT NULL AND LOWER(TRIM(c.funding_stage)) = LOWER(?))
-        )
-      GROUP BY c.company_id
-      HAVING COUNT(j.job_id) > 2
-      ORDER BY
-        CASE
-          WHEN ? != '' AND c.industry IS NOT NULL AND LOWER(TRIM(c.industry)) = LOWER(?) THEN 0
-          ELSE 1
-        END,
-        COUNT(j.job_id) DESC,
-        MAX(j.post_at) DESC
-      LIMIT ?
-    `,
-    args: [
-      companyId,
-      industryKey,
-      industryKey,
-      fundingKey,
-      fundingKey,
-      industryKey,
-      industryKey,
-      PEER_CANDIDATE_LIMIT,
-    ],
-  });
+  const aggs = await loadCompanyAggregates();
+  const scored = aggs
+    .filter((row) => row.company_id !== companyId)
+    .map((row) => {
+      const peerIndustry = laneKey(row.industry);
+      const peerFunding = laneKey(row.funding_stage);
+      const sameIndustry = !!industryKey && peerIndustry === industryKey;
+      const sameFunding = !!fundingKey && peerFunding === fundingKey;
+      if (!sameIndustry && !sameFunding) return null;
+      const lane: CompanyPeerSummary["lane"] =
+        sameIndustry && sameFunding
+          ? "mixed"
+          : sameIndustry
+            ? "industry"
+            : "funding_stage";
+      const last = row.last_post_at;
+      return {
+        peer: {
+          company_id: row.company_id,
+          company_name: row.company_name,
+          industry: row.industry,
+          size: row.size,
+          funding_stage: row.funding_stage,
+          job_count: row.job_count,
+          last_post_at: last
+            ? new Date(last).toISOString().slice(0, 10)
+            : null,
+          lane,
+        } satisfies CompanyPeerSummary,
+        industryRank: sameIndustry ? 0 : 1,
+        jobCount: row.job_count,
+        lastMs: last ? new Date(last).getTime() : 0,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x != null)
+    .sort((a, b) => {
+      if (a.industryRank !== b.industryRank) {
+        return a.industryRank - b.industryRank;
+      }
+      if (b.jobCount !== a.jobCount) return b.jobCount - a.jobCount;
+      return b.lastMs - a.lastMs;
+    });
 
-  const peers: CompanyPeerSummary[] = result.rows.map((row) => {
-    const r = row as Record<string, unknown>;
-    const peerIndustry = asNullableString(r.industry);
-    const peerFunding = asNullableString(r.funding_stage);
-    const sameIndustry =
-      !!industryKey &&
-      (peerIndustry || "").trim().toLowerCase() === industryKey.toLowerCase();
-    const sameFunding =
-      !!fundingKey &&
-      (peerFunding || "").trim().toLowerCase() === fundingKey.toLowerCase();
-    const lane: CompanyPeerSummary["lane"] =
-      sameIndustry && sameFunding
-        ? "mixed"
-        : sameIndustry
-          ? "industry"
-          : "funding_stage";
-    const last = asNullableString(r.last_post_at);
-    return {
-      company_id: asString(r.company_id),
-      company_name: asString(r.company_name),
-      industry: peerIndustry,
-      size: asNullableString(r.size),
-      funding_stage: peerFunding,
-      job_count: asNumber(r.job_count),
-      last_post_at: last
-        ? new Date(last).toISOString().slice(0, 10)
-        : null,
-      lane,
-    };
-  });
+  const peers = scored.slice(0, PEER_LIMIT).map((x) => x.peer);
 
   const laneLabel = industryKey
     ? fundingKey
-      ? `Same industry (${industryKey}), preferring similar funding (${fundingKey})`
-      : `Same industry (${industryKey})`
-    : `Same funding stage (${fundingKey})`;
+      ? `Same industry (${industry}), preferring similar funding (${fundingStage})`
+      : `Same industry (${industry})`
+    : `Same funding stage (${fundingStage})`;
 
-  return { peers: peers.slice(0, PEER_LIMIT), laneLabel };
+  return { peers, laneLabel };
 }
 
 /**
