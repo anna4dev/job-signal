@@ -91,3 +91,49 @@ export type CompanyQuickStats = {
   lastPostAt: string | null;
   indexable: boolean;
 };
+
+/** One month on the hiring trajectory timeline (Phase C). */
+export type CompanyTrajectoryMonth = {
+  month: string;
+  jobCount: number;
+  remoteShare: number | null;
+  salaryCoverage: number | null;
+  topLevel: string | null;
+};
+
+/** How stable key signals are across early vs late posting history. */
+export type CompanySignalConsistency = {
+  /** 0–100; higher = more stable across early/late halves. */
+  score: number;
+  remoteEarly: number | null;
+  remoteLate: number | null;
+  salaryEarly: number | null;
+  salaryLate: number | null;
+  visaEarly: number | null;
+  visaLate: number | null;
+  topLevelEarly: string | null;
+  topLevelLate: string | null;
+  notes: string[];
+};
+
+/** Same-lane peer company for comparison (Phase C). */
+export type CompanyPeerSummary = {
+  company_id: string;
+  company_name: string;
+  industry: string | null;
+  size: string | null;
+  funding_stage: string | null;
+  job_count: number;
+  last_post_at: string | null;
+  /** Why this peer was selected (e.g. same industry). */
+  lane: "industry" | "funding_stage" | "mixed";
+};
+
+/** Long-horizon context for company detail (Phase C). */
+export type CompanyLongHorizon = {
+  trajectory: CompanyTrajectoryMonth[];
+  consistency: CompanySignalConsistency;
+  peers: CompanyPeerSummary[];
+  peerLaneLabel: string;
+  disclaimer: string;
+};
