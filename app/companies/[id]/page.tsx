@@ -8,14 +8,13 @@ import CompanyPageTracker from "@/components/CompanyPageTracker";
 import CompanyJobsZone from "@/components/CompanyJobsZone";
 import CompanyEvidenceZone from "@/components/CompanyEvidenceZone";
 import CompanyTrendZone from "@/components/CompanyTrendZone";
-import CompanyLongHorizonZone from "@/components/CompanyLongHorizonZone";
+import CompanyLongHorizonSuspended from "@/components/CompanyLongHorizonSuspended";
 import {
   getCompanyDetail,
   getCompanyJobs,
   getCompanyQuickStats,
 } from "@/lib/companies";
 import { getCompanyEvidence } from "@/lib/companyEvidence";
-import { getCompanyLongHorizon } from "@/lib/companyLongHorizon";
 
 export const revalidate = 300;
 
@@ -103,11 +102,10 @@ export default async function CompanyDetailPage({
   const company = id ? await getCompanyDetail(id) : null;
   if (!company || !id) notFound();
 
-  const [stats, jobs, evidence, longHorizon] = await Promise.all([
+  const [stats, jobs, evidence] = await Promise.all([
     getCompanyQuickStats(id, company.company_name),
     getCompanyJobs(id, 50),
     getCompanyEvidence(id, company.source),
-    getCompanyLongHorizon(id, company.industry, company.funding_stage),
   ]);
 
   const techStack = parseJsonArray(company.tech_stack);
@@ -272,7 +270,11 @@ export default async function CompanyDetailPage({
 
         <CompanyEvidenceZone evidence={evidence} />
         <CompanyTrendZone evidence={evidence} />
-        <CompanyLongHorizonZone companyId={id} longHorizon={longHorizon} />
+        <CompanyLongHorizonSuspended
+          companyId={id}
+          industry={company.industry}
+          fundingStage={company.funding_stage}
+        />
 
         <CompanyJobsZone
           companyId={id}
