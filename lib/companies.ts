@@ -31,6 +31,8 @@ type CompanyAggRow = {
   posting_months: string[];
 };
 
+export type { CompanyAggRow };
+
 /** Aligns with common `isAnonymousCompanyName` placeholders (SQL pre-filter). */
 const SQL_PLACEHOLDER_NAMES = [
   "anonymous",
@@ -50,8 +52,10 @@ let aggregateSnapshot: { at: number; rows: CompanyAggRow[] } | null = null;
  * Load companies that already pass cheap SQL gates (job_count > 2, >1 posting
  * month, non-placeholder name). Full indexability (non-adjacent months) is
  * applied in memory. Snapshot is TTL-cached across requests.
+ *
+ * Also used by Phase C peer matching to avoid per-request LOWER(TRIM) scans.
  */
-async function loadCompanyAggregates(): Promise<CompanyAggRow[]> {
+export async function loadCompanyAggregates(): Promise<CompanyAggRow[]> {
   const now = Date.now();
   if (
     aggregateSnapshot &&

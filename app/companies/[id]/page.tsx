@@ -8,6 +8,7 @@ import CompanyPageTracker from "@/components/CompanyPageTracker";
 import CompanyJobsZone from "@/components/CompanyJobsZone";
 import CompanyEvidenceZone from "@/components/CompanyEvidenceZone";
 import CompanyTrendZone from "@/components/CompanyTrendZone";
+import CompanyLongHorizonSuspended from "@/components/CompanyLongHorizonSuspended";
 import {
   getCompanyDetail,
   getCompanyJobs,
@@ -269,6 +270,11 @@ export default async function CompanyDetailPage({
 
         <CompanyEvidenceZone evidence={evidence} />
         <CompanyTrendZone evidence={evidence} />
+        <CompanyLongHorizonSuspended
+          companyId={id}
+          industry={company.industry}
+          fundingStage={company.funding_stage}
+        />
 
         <CompanyJobsZone
           companyId={id}

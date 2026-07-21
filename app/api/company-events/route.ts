@@ -13,12 +13,23 @@ const MAX_JOB_ID_LEN = 128;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+const JOB_SCOPED = new Set([
+  "job_click",
+  "bookmark_add",
+  "bookmark_remove",
+  "apply_click",
+]);
+
 const EVENT_TYPES = new Set([
   "page_view",
   "job_click",
   "bookmark_add",
   "bookmark_remove",
   "apply_click",
+  "peer_click",
+  "trust_flag",
+  "revisit",
+  "long_horizon_view",
 ]);
 
 /** Narrow unknown values to non-empty trimmed strings. */
@@ -41,6 +52,7 @@ function rowNumber(row: unknown, key: string): number {
 type IncomingEvent = {
   company_id: string;
   job_id: string | null;
+  related_company_id: string | null;
   event_type: string;
   position: number | null;
 };
@@ -103,13 +115,22 @@ function normalizeEvent(raw: unknown): IncomingEvent | null {
   const companyId = obj.company_id.trim();
   if (companyId.length > MAX_COMPANY_ID_LEN) return null;
 
-  const isPageView = obj.event_type === "page_view";
+  const needsJob = JOB_SCOPED.has(obj.event_type);
   let jobId: string | null = null;
   if (isNonEmptyString(obj.job_id)) {
     const trimmed = obj.job_id.trim();
     if (trimmed.length > MAX_JOB_ID_LEN) return null;
     jobId = trimmed;
-  } else if (!isPageView) {
+  } else if (needsJob) {
+    return null;
+  }
+
+  let relatedCompanyId: string | null = null;
+  if (isNonEmptyString(obj.related_company_id)) {
+    const trimmed = obj.related_company_id.trim();
+    if (trimmed.length > MAX_COMPANY_ID_LEN) return null;
+    relatedCompanyId = trimmed;
+  } else if (obj.event_type === "peer_click") {
     return null;
   }
 
@@ -121,14 +142,15 @@ function normalizeEvent(raw: unknown): IncomingEvent | null {
   return {
     company_id: companyId,
     job_id: jobId,
+    related_company_id: relatedCompanyId,
     event_type: obj.event_type,
     position,
   };
 }
 
 /**
- * Batch ingest company-page behavior events for Phase B exit metrics
- * (second-click, bookmark/apply from company pages). Monitoring only.
+ * Batch ingest company-page behavior events for Phase B/C exit metrics.
+ * Monitoring only.
  */
 export async function POST(req: Request) {
   let body: unknown;
@@ -193,7 +215,13 @@ export async function POST(req: Request) {
     }
 
     const companyIds = Array.from(
-      new Set(accepted.map((e) => e.company_id)),
+      new Set(
+        accepted.flatMap((e) =>
+          e.related_company_id
+            ? [e.company_id, e.related_company_id]
+            : [e.company_id],
+        ),
+      ),
     );
     const companyPlaceholders = companyIds.map(() => "?").join(",");
     const companyCheck = await db.execute({
@@ -229,6 +257,12 @@ export async function POST(req: Request) {
 
     const filtered = accepted.filter((event) => {
       if (!knownCompanies.has(event.company_id)) return false;
+      if (
+        event.related_company_id &&
+        !knownCompanies.has(event.related_company_id)
+      ) {
+        return false;
+      }
       if (!event.job_id) return true;
       const owner = jobCompany.get(event.job_id);
       return owner === event.company_id;
@@ -242,8 +276,8 @@ export async function POST(req: Request) {
 
     const insertSql = `
       INSERT INTO company_events (
-        id, anonymous_id, company_id, job_id, event_type, position
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        id, anonymous_id, company_id, job_id, related_company_id, event_type, position
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
 
     await db.batch(
@@ -254,6 +288,7 @@ export async function POST(req: Request) {
           anonymous_id,
           event.company_id,
           event.job_id,
+          event.related_company_id,
           event.event_type,
           event.position,
         ],
