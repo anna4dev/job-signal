@@ -77,40 +77,40 @@ function isRemoteAnywhereId(id: string): boolean {
   );
 }
 
+function allowIncludesRemoteAnywhere(allow: LocationSpec[]): boolean {
+  return allow.some(
+    (spec) =>
+      spec.scope === "remote_tz" || isRemoteAnywhereId(canonical(spec.id)),
+  );
+}
+
 /**
- * Location allow-list = where you can show up in person.
- * Remote jobs are not tied to HQ country when the user accepts remote work
- * (work.modes includes remote, remoteOk on a spec, or an explicit remote tag).
+ * Location allow-list = where the candidate can work from / relocate to.
+ *
+ * - Remote and onsite/hybrid both require geographic overlap with the allow-list
+ *   (Singapore profile does not match US-only remote or US onsite without visa).
+ * - Relocatable roles (onsite/hybrid) with job visa sponsorship bypass the
+ *   allow-list (US/UK onsite+visa can fit a non-US/non-UK profile location).
+ * - Explicit Remote/worldwide tags opt into remote-anywhere jobs only.
  */
-function locationAllows(
-  job: FitJobInput,
-  allow: LocationSpec[],
-  acceptedModes: WorkMode[] = [],
-): boolean {
+function locationAllows(job: FitJobInput, allow: LocationSpec[]): boolean {
   if (allow.length === 0) return true;
+
+  const mode = deriveWorkMode(job);
+  const isRemote = mode === "remote";
+
+  // Visa-sponsored relocation: onsite/hybrid may be outside the allow-list.
+  if (!isRemote && job.location_visa_supported === 1) {
+    return true;
+  }
+
+  if (isRemote && allowIncludesRemoteAnywhere(allow)) {
+    return true;
+  }
 
   const country = canonical(job.location_country);
   const city = canonical(job.location_city);
   const tz = canonical(job.location_timezone);
-  const isRemote =
-    job.location_remote === 1 || deriveWorkMode(job) === "remote";
-
-  // Accepting remote means HQ geography (NA vs South Asia) is not a hard fail.
-  if (isRemote && acceptedModes.includes("remote")) {
-    return true;
-  }
-
-  if (
-    isRemote &&
-    allow.some(
-      (spec) =>
-        spec.remoteOk === true ||
-        spec.scope === "remote_tz" ||
-        isRemoteAnywhereId(canonical(spec.id)),
-    )
-  ) {
-    return true;
-  }
 
   return allow.some((spec) => {
     const id = canonical(spec.id);
@@ -123,10 +123,7 @@ function locationAllows(
 
     switch (spec.scope) {
       case "country":
-        if (country && tokensMatch(country, id)) {
-          return true;
-        }
-        return Boolean(spec.remoteOk && isRemote);
+        return Boolean(country && tokensMatch(country, id));
       case "city":
         return Boolean(city && tokensMatch(city, id));
       case "region":
@@ -136,7 +133,12 @@ function locationAllows(
         );
       case "remote_tz":
         if (!isRemote) return false;
-        if (id === "global" || id.endsWith("_tz") || id.includes("global")) {
+        if (
+          isRemoteAnywhereId(id) ||
+          id === "global" ||
+          id.endsWith("_tz") ||
+          id.includes("global")
+        ) {
           return true;
         }
         return !tz || tokensMatch(tz, id);
@@ -352,7 +354,7 @@ function evaluateHardConstraints(
 
   // Locations
   if (hc.locations.allow.length > 0) {
-    const ok = locationAllows(job, hc.locations.allow, hc.work.modes);
+    const ok = locationAllows(job, hc.locations.allow);
     breakdown.push({
       key: "location_constraint",
       score: ok ? 1 : 0,
