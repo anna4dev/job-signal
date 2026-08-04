@@ -27,8 +27,11 @@ export interface Weighted<T> {
 export type LocationScope = "country" | "city" | "region" | "remote_tz";
 export interface LocationSpec {
   scope: LocationScope;
-  id: ID; // e.g. 'US', 'SF', 'EU', 'US_TZ'
-  remoteOk?: boolean; // true = accept remote jobs in this area
+  id: ID; // e.g. 'US', 'SF', 'EU', 'US_TZ', 'Remote'
+  // true = this area also accepts remote (HQ country of a remote job need not match).
+  // Prefer pairing with hardConstraints.work.modes including "remote"; fit() treats
+  // remote jobs as location-OK when remote mode is accepted even if remoteOk is unset.
+  remoteOk?: boolean;
 }
 
 // ── 1. HardConstraints — filter only, no scoring ─────────────────────────────
