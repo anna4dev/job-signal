@@ -112,6 +112,73 @@ describe("fit()", () => {
     expect(result.hardFail).toBe(false);
   });
 
+  it("passes location for remote jobs when work.modes includes remote", () => {
+    const result = fit(
+      baseJob({
+        location_country: "United States",
+        location_remote: 1,
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["remote"] },
+          locations: {
+            allow: [{ scope: "country", id: "South Asia" }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFail).toBe(false);
+    expect(result.hardFailReasons).not.toContain("location_constraint");
+    expect(result.hardFailReasons).not.toContain("work_mode_constraint");
+  });
+
+  it("still hard-fails onsite jobs outside the allow-list even if remote is accepted", () => {
+    const result = fit(
+      baseJob({
+        location_country: "United States",
+        location_remote: 0,
+        work_style: "onsite",
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["remote", "hybrid"] },
+          locations: {
+            allow: [{ scope: "country", id: "South Asia", remoteOk: true }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFail).toBe(true);
+    expect(result.hardFailReasons).toContain("location_constraint");
+  });
+
+  it("treats legacy location tag 'Remote' as accepting remote jobs", () => {
+    const result = fit(
+      baseJob({
+        location_country: "Germany",
+        location_remote: 1,
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: [] },
+          locations: {
+            allow: [
+              { scope: "country", id: "South Asia" },
+              { scope: "country", id: "Remote" },
+            ],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFailReasons).not.toContain("location_constraint");
+  });
+
   it("does not match skill 'go' against 'Google Cloud Platform'", () => {
     const withGoPref = emptySignals({
       preferences: {

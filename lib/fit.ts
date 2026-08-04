@@ -66,17 +66,60 @@ function deriveWorkMode(job: FitJobInput): WorkMode {
   return job.location_remote === 1 ? "remote" : "onsite";
 }
 
-function locationAllows(job: FitJobInput, allow: LocationSpec[]): boolean {
+/** Free-text / suggest values that mean "remote anywhere", not a country. */
+function isRemoteAnywhereId(id: string): boolean {
+  return (
+    id === "remote" ||
+    id === "worldwide" ||
+    id === "anywhere" ||
+    id === "global" ||
+    id === "remote_tz"
+  );
+}
+
+/**
+ * Location allow-list = where you can show up in person.
+ * Remote jobs are not tied to HQ country when the user accepts remote work
+ * (work.modes includes remote, remoteOk on a spec, or an explicit remote tag).
+ */
+function locationAllows(
+  job: FitJobInput,
+  allow: LocationSpec[],
+  acceptedModes: WorkMode[] = [],
+): boolean {
   if (allow.length === 0) return true;
 
   const country = canonical(job.location_country);
   const city = canonical(job.location_city);
   const tz = canonical(job.location_timezone);
-  const isRemote = job.location_remote === 1;
+  const isRemote =
+    job.location_remote === 1 || deriveWorkMode(job) === "remote";
+
+  // Accepting remote means HQ geography (NA vs South Asia) is not a hard fail.
+  if (isRemote && acceptedModes.includes("remote")) {
+    return true;
+  }
+
+  if (
+    isRemote &&
+    allow.some(
+      (spec) =>
+        spec.remoteOk === true ||
+        spec.scope === "remote_tz" ||
+        isRemoteAnywhereId(canonical(spec.id)),
+    )
+  ) {
+    return true;
+  }
 
   return allow.some((spec) => {
     const id = canonical(spec.id);
     if (!id) return false;
+
+    // Legacy: "Remote" saved as scope=country still means remote-anywhere.
+    if (isRemoteAnywhereId(id)) {
+      return isRemote;
+    }
 
     switch (spec.scope) {
       case "country":
@@ -309,7 +352,7 @@ function evaluateHardConstraints(
 
   // Locations
   if (hc.locations.allow.length > 0) {
-    const ok = locationAllows(job, hc.locations.allow);
+    const ok = locationAllows(job, hc.locations.allow, hc.work.modes);
     breakdown.push({
       key: "location_constraint",
       score: ok ? 1 : 0,
