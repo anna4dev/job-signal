@@ -435,8 +435,26 @@ export default function ProfileContent() {
   const locationTags = profile.hardConstraints.locations.allow.map((l) => l.id);
 
   function addLocation(value: string) {
-    const spec: LocationSpec = { scope: "country", id: value };
-    patchHC({ locations: { allow: [...profile.hardConstraints.locations.allow, spec] } });
+    const id = value.trim();
+    if (!id) return;
+    const remoteAnywhere =
+      /^(remote|worldwide|anywhere|global)$/i.test(id);
+    const acceptsRemote =
+      profile.hardConstraints.work.modes.includes("remote");
+    // "Remote" is work geography, not a country; countries get remoteOk when
+    // the user already accepts remote so HQ labels don't hard-fail remote jobs.
+    const spec: LocationSpec = remoteAnywhere
+      ? { scope: "remote_tz", id: "Remote" }
+      : {
+          scope: "country",
+          id,
+          ...(acceptsRemote ? { remoteOk: true } : {}),
+        };
+    patchHC({
+      locations: {
+        allow: [...profile.hardConstraints.locations.allow, spec],
+      },
+    });
   }
 
   function removeLocation(id: string) {
@@ -444,6 +462,25 @@ export default function ProfileContent() {
       locations: {
         allow: profile.hardConstraints.locations.allow.filter((l) => l.id !== id),
       },
+    });
+  }
+
+  function toggleWorkMode(mode: WorkMode) {
+    const modes = profile.hardConstraints.work.modes;
+    const next = modes.includes(mode)
+      ? modes.filter((m) => m !== mode)
+      : [...modes, mode];
+    const enablingRemote = mode === "remote" && !modes.includes("remote");
+    const allow = enablingRemote
+      ? profile.hardConstraints.locations.allow.map((spec) =>
+          spec.scope === "remote_tz" || spec.remoteOk
+            ? spec
+            : { ...spec, remoteOk: true },
+        )
+      : profile.hardConstraints.locations.allow;
+    patchHC({
+      work: { ...profile.hardConstraints.work, modes: next },
+      locations: { allow },
     });
   }
 
@@ -583,17 +620,7 @@ export default function ProfileContent() {
             <ChipMultiSelect
               options={WORK_MODE_OPTIONS}
               selected={profile.hardConstraints.work.modes}
-              onToggle={(mode: WorkMode) => {
-                const modes = profile.hardConstraints.work.modes;
-                patchHC({
-                  work: {
-                    ...profile.hardConstraints.work,
-                    modes: modes.includes(mode)
-                      ? modes.filter((m) => m !== mode)
-                      : [...modes, mode],
-                  },
-                });
-              }}
+              onToggle={toggleWorkMode}
             />
             {workModesSuggestion && (
               <SuggestionRow
