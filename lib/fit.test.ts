@@ -265,6 +265,51 @@ describe("fit()", () => {
     expect(result.hardFailReasons).not.toContain("location_constraint");
   });
 
+  it("treats profile-persisted remote_tz Remote as remote-anywhere", () => {
+    const result = fit(
+      baseJob({
+        location_country: "Germany",
+        location_remote: 1,
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["remote"] },
+          locations: {
+            allow: [
+              { scope: "country", id: "Singapore" },
+              { scope: "remote_tz", id: "Remote" },
+            ],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFailReasons).not.toContain("location_constraint");
+  });
+
+  it("does not treat remoteOk on a country as worldwide remote eligibility", () => {
+    const result = fit(
+      baseJob({
+        location_country: "United States",
+        location_remote: 1,
+        location_visa_supported: 0,
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["remote"] },
+          locations: {
+            allow: [{ scope: "country", id: "Singapore", remoteOk: true }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFail).toBe(true);
+    expect(result.hardFailReasons).toContain("location_constraint");
+  });
+
   it("does not match skill 'go' against 'Google Cloud Platform'", () => {
     const withGoPref = emptySignals({
       preferences: {
