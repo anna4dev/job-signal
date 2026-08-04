@@ -435,8 +435,19 @@ export default function ProfileContent() {
   const locationTags = profile.hardConstraints.locations.allow.map((l) => l.id);
 
   function addLocation(value: string) {
-    const spec: LocationSpec = { scope: "country", id: value };
-    patchHC({ locations: { allow: [...profile.hardConstraints.locations.allow, spec] } });
+    const id = value.trim();
+    if (!id) return;
+    const remoteAnywhere =
+      /^(remote|worldwide|anywhere|global)$/i.test(id);
+    // Explicit Remote/worldwide = remote-anywhere opt-in; countries stay geographic.
+    const spec: LocationSpec = remoteAnywhere
+      ? { scope: "remote_tz", id: "Remote" }
+      : { scope: "country", id };
+    patchHC({
+      locations: {
+        allow: [...profile.hardConstraints.locations.allow, spec],
+      },
+    });
   }
 
   function removeLocation(id: string) {

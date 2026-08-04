@@ -112,6 +112,204 @@ describe("fit()", () => {
     expect(result.hardFail).toBe(false);
   });
 
+  it("hard-fails US remote against a Singapore location allow-list", () => {
+    const result = fit(
+      baseJob({
+        location_country: "United States",
+        location_remote: 1,
+        location_visa_supported: 0,
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["remote"] },
+          locations: {
+            allow: [{ scope: "country", id: "Singapore" }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFail).toBe(true);
+    expect(result.hardFailReasons).toContain("location_constraint");
+  });
+
+  it("passes Singapore remote against a Singapore allow-list", () => {
+    const result = fit(
+      baseJob({
+        location_country: "Singapore",
+        location_remote: 1,
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["remote"] },
+          locations: {
+            allow: [{ scope: "country", id: "Singapore" }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFailReasons).not.toContain("location_constraint");
+  });
+
+  it("hard-fails US onsite/hybrid without visa for a Singapore profile", () => {
+    const result = fit(
+      baseJob({
+        location_country: "United States",
+        location_remote: 0,
+        location_visa_supported: 0,
+        work_style: "onsite",
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["onsite", "hybrid"] },
+          locations: {
+            allow: [{ scope: "country", id: "Singapore" }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFail).toBe(true);
+    expect(result.hardFailReasons).toContain("location_constraint");
+  });
+
+  it("passes US onsite with visa for a Singapore profile location", () => {
+    const result = fit(
+      baseJob({
+        location_country: "United States",
+        location_remote: 0,
+        location_visa_supported: 1,
+        work_style: "onsite",
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["onsite"] },
+          locations: {
+            allow: [{ scope: "country", id: "Singapore" }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFailReasons).not.toContain("location_constraint");
+  });
+
+  it("passes UK hybrid with visa for a non-UK profile location", () => {
+    const result = fit(
+      baseJob({
+        location_country: "United Kingdom",
+        location_remote: 0,
+        location_visa_supported: 1,
+        work_style: "hybrid",
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["hybrid"] },
+          locations: {
+            allow: [{ scope: "country", id: "Singapore" }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFailReasons).not.toContain("location_constraint");
+  });
+
+  it("does not let job visa bypass location for US remote", () => {
+    const result = fit(
+      baseJob({
+        location_country: "United States",
+        location_remote: 1,
+        location_visa_supported: 1,
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["remote"] },
+          locations: {
+            allow: [{ scope: "country", id: "Singapore" }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFailReasons).toContain("location_constraint");
+  });
+
+  it("treats legacy location tag 'Remote' as remote-anywhere only", () => {
+    const result = fit(
+      baseJob({
+        location_country: "Germany",
+        location_remote: 1,
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["remote"] },
+          locations: {
+            allow: [
+              { scope: "country", id: "Singapore" },
+              { scope: "country", id: "Remote" },
+            ],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFailReasons).not.toContain("location_constraint");
+  });
+
+  it("treats profile-persisted remote_tz Remote as remote-anywhere", () => {
+    const result = fit(
+      baseJob({
+        location_country: "Germany",
+        location_remote: 1,
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["remote"] },
+          locations: {
+            allow: [
+              { scope: "country", id: "Singapore" },
+              { scope: "remote_tz", id: "Remote" },
+            ],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFailReasons).not.toContain("location_constraint");
+  });
+
+  it("does not treat remoteOk on a country as worldwide remote eligibility", () => {
+    const result = fit(
+      baseJob({
+        location_country: "United States",
+        location_remote: 1,
+        location_visa_supported: 0,
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["remote"] },
+          locations: {
+            allow: [{ scope: "country", id: "Singapore", remoteOk: true }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFail).toBe(true);
+    expect(result.hardFailReasons).toContain("location_constraint");
+  });
+
   it("does not match skill 'go' against 'Google Cloud Platform'", () => {
     const withGoPref = emptySignals({
       preferences: {

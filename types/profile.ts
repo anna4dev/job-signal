@@ -27,12 +27,20 @@ export interface Weighted<T> {
 export type LocationScope = "country" | "city" | "region" | "remote_tz";
 export interface LocationSpec {
   scope: LocationScope;
-  id: ID; // e.g. 'US', 'SF', 'EU', 'US_TZ'
-  remoteOk?: boolean; // true = accept remote jobs in this area
+  id: ID; // e.g. 'US', 'SF', 'EU', 'US_TZ', 'Remote'
+  /**
+   * Legacy flag. fit() no longer treats remoteOk as "any remote worldwide".
+   * Geographic allow-list always applies; use scope remote_tz / id Remote for
+   * explicit remote-anywhere. Kept optional for older localStorage profiles.
+   */
+  remoteOk?: boolean;
 }
 
 // ── 1. HardConstraints — filter only, no scoring ─────────────────────────────
 // Any unmet constraint → score=0 (hard fail). No partial credit.
+// locations.allow: geographic overlap required for remote and non-visa
+// onsite/hybrid. Job visa sponsorship bypasses location for onsite/hybrid only
+// (relocation). See AGENTS.md / lib/fit.ts locationAllows.
 export interface HardConstraints {
   visa: { required: boolean };
   work: {
