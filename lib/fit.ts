@@ -84,14 +84,27 @@ function allowIncludesRemoteAnywhere(allow: LocationSpec[]): boolean {
   );
 }
 
+/** Job has no usable geographic anchor (UI "Location N/A"). */
+function jobLacksGeography(job: FitJobInput): boolean {
+  const country = canonical(job.location_country);
+  const city = canonical(job.location_city);
+  // Empty or remote-anywhere placeholders are not hire-from regions.
+  const hasCountry = Boolean(country && !isRemoteAnywhereId(country));
+  const hasCity = Boolean(city && !isRemoteAnywhereId(city));
+  return !hasCountry && !hasCity;
+}
+
 /**
  * Location allow-list = where the candidate can work from / relocate to.
  *
- * - Remote and onsite/hybrid both require geographic overlap with the allow-list
- *   (Singapore profile does not match US-only remote or US onsite without visa).
+ * - Remote with a stated country/city must overlap the allow-list
+ *   (Singapore profile ≠ US-only remote).
+ * - Remote with no country/city (Location N/A) passes location regardless of
+ *   profile allow-list — the JD did not constrain geography.
  * - Relocatable roles (onsite/hybrid) with job visa sponsorship bypass the
  *   allow-list (US/UK onsite+visa can fit a non-US/non-UK profile location).
- * - Explicit Remote/worldwide tags opt into remote-anywhere jobs only.
+ * - Explicit Remote/worldwide profile tags still opt into remote-anywhere when
+ *   the JD names a country outside the allow-list.
  */
 function locationAllows(job: FitJobInput, allow: LocationSpec[]): boolean {
   if (allow.length === 0) return true;
@@ -101,6 +114,12 @@ function locationAllows(job: FitJobInput, allow: LocationSpec[]): boolean {
 
   // Visa-sponsored relocation: onsite/hybrid may be outside the allow-list.
   if (!isRemote && job.location_visa_supported === 1) {
+    return true;
+  }
+
+  // JD remote + no geography → not a location hard-fail (profile may still
+  // filter via work.modes). Stated-country remote still must align below.
+  if (isRemote && jobLacksGeography(job)) {
     return true;
   }
 
