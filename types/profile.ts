@@ -38,9 +38,9 @@ export interface LocationSpec {
 
 // ── 1. HardConstraints — filter only, no scoring ─────────────────────────────
 // Any unmet constraint → score=0 (hard fail). No partial credit.
-// locations.allow: geographic overlap required for remote and non-visa
-// onsite/hybrid. Job visa sponsorship bypasses location for onsite/hybrid only
-// (relocation). See AGENTS.md / lib/fit.ts locationAllows.
+// locations.allow: geographic overlap when the job states country/city.
+// Remote with no geography passes. Job visa sponsorship bypasses location for
+// onsite/hybrid only (relocation). See AGENTS.md / lib/fit.ts locationAllows.
 export interface HardConstraints {
   visa: { required: boolean };
   work: {
