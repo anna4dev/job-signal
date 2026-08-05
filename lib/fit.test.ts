@@ -284,6 +284,27 @@ describe("fit()", () => {
     expect(result.hardFailReasons).not.toContain("location_constraint");
   });
 
+  it("passes remote with placeholder worldwide city and no country", () => {
+    const result = fit(
+      baseJob({
+        location_country: null,
+        location_city: "Worldwide",
+        location_remote: 1,
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["remote"] },
+          locations: {
+            allow: [{ scope: "country", id: "Singapore" }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFailReasons).not.toContain("location_constraint");
+  });
+
   it("treats legacy location tag 'Remote' as remote-anywhere only", () => {
     const result = fit(
       baseJob({

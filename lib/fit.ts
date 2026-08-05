@@ -88,10 +88,10 @@ function allowIncludesRemoteAnywhere(allow: LocationSpec[]): boolean {
 function jobLacksGeography(job: FitJobInput): boolean {
   const country = canonical(job.location_country);
   const city = canonical(job.location_city);
-  if (!country && !city) return true;
-  // Parsed placeholders that are not real hire-from regions.
-  if (country && isRemoteAnywhereId(country) && !city) return true;
-  return false;
+  // Empty or remote-anywhere placeholders are not hire-from regions.
+  const hasCountry = Boolean(country && !isRemoteAnywhereId(country));
+  const hasCity = Boolean(city && !isRemoteAnywhereId(city));
+  return !hasCountry && !hasCity;
 }
 
 /**
