@@ -391,7 +391,7 @@ _Goal: Ship practical matching with clear reasons, not black-box scoring._
 - [x] **3.1 Deterministic Fit Engine**
 - Deterministic `fit(job, unifiedSignals)` outputs `fitScore + reasonTags + factorBreakdown`.
 - Hard constraints unmet → `fitScore = 0`; preferences are pre-normalized (no `normalizeWeights` in fit).
-- Location hard-constraint: allow-list is geographic for remote and onsite/hybrid; onsite/hybrid with job visa sponsorship may relocate outside the allow-list; remote is not unlocked by visa; explicit `Remote` / worldwide tags only for remote-anywhere. See `AGENTS.md` signal invariants and `lib/fit.ts` `locationAllows`.
+- Location hard-constraint: stated job geography must overlap the allow-list; remote with no country/city (Location N/A) passes; onsite/hybrid with job visa may relocate outside the allow-list; named-country remote is not unlocked by visa; profile `Remote` / worldwide tags still opt into remote-anywhere. See `AGENTS.md` and `lib/fit.ts` `locationAllows`.
 
 - [x] **3.2 Best Fit View + Sort Toggle**
 - Toggle `Best Fit`, `Newest`, `Highest Pay` via `sort` query param.
