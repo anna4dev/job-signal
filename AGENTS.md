@@ -39,7 +39,7 @@ New client state must use versioned keys, coercion on read, and a custom `window
 - **Capabilities are never inferred from behavior** — skills, seniority, years must be self-declared.
 - **Assist-fill ≠ implicit signals** — Profile suggestion `source: 'implicit'` marks explicit profile fields the user applied; that is different from `ImplicitSignals` in `lib/signals.ts`.
 - **Conflict priority:** `Rejections.soft` > `Preferences` > `Capabilities` (resolved at merge time for skills).
-- **Location allow-list is geographic when the JD states geography** — remote/onsite/hybrid with a country/city must overlap `hardConstraints.locations.allow` (e.g. Singapore profile ≠ US-only remote). Macro regions expand (`EU` includes Germany; `NA` includes US/Canada/Mexico). Do **not** treat “work mode includes remote” as worldwide location pass.
+- **Location allow-list is geographic when the JD states geography** — remote/onsite/hybrid with a country/city must overlap `hardConstraints.locations.allow` (e.g. Singapore profile ≠ US-only remote). Macro regions expand via `lib/locationRegions.ts` (`EU` includes Germany; `EMEA` includes Europe + Middle East + Africa; `NA` includes US/Canada/Mexico). Do **not** treat “work mode includes remote” as worldwide location pass.
 - **Remote with no country/city passes location** — JD did not constrain hire-from region (UI “Location N/A”); profile allow-list must not hard-fail these.
 - **Job visa unlocks relocation, not remote geography** — onsite/hybrid with `location_visa_supported` may pass location even when the job country is outside the allow-list (US/UK + visa can fit a non-local profile). Visa does **not** bypass location for remote roles that name a country.
 - **Profile remote-anywhere is explicit** — `scope: "remote_tz"` / id `Remote` (or worldwide/anywhere/global) still opts into named-country remotes outside the allow-list. Legacy `LocationSpec.remoteOk` must not mean “any remote worldwide”.
@@ -58,7 +58,7 @@ New client state must use versioned keys, coercion on read, and a custom `window
 | Profile types     | `types/profile.ts`                            |
 | Explicit profile  | `lib/profile.ts`, `hooks/useExplicitProfile.ts` |
 | Signal computation| `lib/signals.ts`                              |
-| Fit engine        | `lib/fit.ts`, `types/fit.ts`                  |
+| Fit engine        | `lib/fit.ts`, `lib/locationRegions.ts`, `types/fit.ts` |
 | Profile UI        | `app/profile/ProfileContent.tsx`              |
 | Companies         | `lib/companies.ts`, `lib/companyIndexable.ts`, `lib/dbCoerce.ts`, `lib/companyJobRows.ts`, `lib/companyAggregates.ts`, `lib/companyEvidence.ts`, `lib/companyLongHorizon.ts`, `lib/companyEvents.ts`, `app/companies/` |
 | Assist-fill       | `lib/profileSuggestions.ts`                     |

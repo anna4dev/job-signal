@@ -32,6 +32,7 @@ import type {
   Rejections,
 } from "@/types/profile";
 import type { JobLevel } from "@/types/job";
+import { isMacroRegionId } from "@/lib/locationRegions";
 
 // ── Stable fetch helpers (module-level = stable reference, safe in useEffect deps) ──
 
@@ -439,14 +440,10 @@ export default function ProfileContent() {
     if (!id) return;
     const remoteAnywhere =
       /^(remote|worldwide|anywhere|global)$/i.test(id);
-    const regionMacro =
-      /^(eu|europe|european union|emea|na|north america|uk|apac|asia pacific|south asia)$/i.test(
-        id,
-      );
-    // Explicit Remote/worldwide = remote-anywhere; EU/NA/… = macro regions.
+    // Explicit Remote/worldwide = remote-anywhere; EU/NA/EMEA/… = macro regions.
     const spec: LocationSpec = remoteAnywhere
       ? { scope: "remote_tz", id: "Remote" }
-      : regionMacro
+      : isMacroRegionId(id)
         ? { scope: "region", id }
         : { scope: "country", id };
     patchHC({
