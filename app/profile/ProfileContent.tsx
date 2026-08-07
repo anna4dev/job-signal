@@ -439,10 +439,16 @@ export default function ProfileContent() {
     if (!id) return;
     const remoteAnywhere =
       /^(remote|worldwide|anywhere|global)$/i.test(id);
-    // Explicit Remote/worldwide = remote-anywhere opt-in; countries stay geographic.
+    const regionMacro =
+      /^(eu|europe|european union|emea|na|north america|uk|apac|asia pacific|south asia)$/i.test(
+        id,
+      );
+    // Explicit Remote/worldwide = remote-anywhere; EU/NA/… = macro regions.
     const spec: LocationSpec = remoteAnywhere
       ? { scope: "remote_tz", id: "Remote" }
-      : { scope: "country", id };
+      : regionMacro
+        ? { scope: "region", id }
+        : { scope: "country", id };
     patchHC({
       locations: {
         allow: [...profile.hardConstraints.locations.allow, spec],
