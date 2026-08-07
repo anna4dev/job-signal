@@ -13,6 +13,10 @@ import type {
   FitResult,
 } from "@/types/fit";
 import { parseTechStackField } from "@/lib/parseJobFields";
+import { canonCountry, countryInAllowRegion } from "@/lib/locationRegions";
+
+// Re-export for ProfileContent / callers that need the shared macro check.
+export { isMacroRegionId } from "@/lib/locationRegions";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -77,6 +81,21 @@ function isRemoteAnywhereId(id: string): boolean {
   );
 }
 
+/** Direct country/city token match, alias canon, or macro-region membership. */
+function geoMatchesSpec(
+  country: string,
+  city: string,
+  specId: string,
+): boolean {
+  if (country) {
+    if (tokensMatch(country, specId)) return true;
+    if (canonCountry(country) === canonCountry(specId)) return true;
+    if (countryInAllowRegion(country, specId)) return true;
+  }
+  if (city && tokensMatch(city, specId)) return true;
+  return false;
+}
+
 function allowIncludesRemoteAnywhere(allow: LocationSpec[]): boolean {
   return allow.some(
     (spec) =>
@@ -98,7 +117,8 @@ function jobLacksGeography(job: FitJobInput): boolean {
  * Location allow-list = where the candidate can work from / relocate to.
  *
  * - Remote with a stated country/city must overlap the allow-list
- *   (Singapore profile ≠ US-only remote).
+ *   (Singapore profile ≠ US-only remote). Macro regions (EU, NA, …) expand
+ *   to member countries (EU covers Germany).
  * - Remote with no country/city (Location N/A) passes location regardless of
  *   profile allow-list — the JD did not constrain geography.
  * - Relocatable roles (onsite/hybrid) with job visa sponsorship bypass the
@@ -142,14 +162,10 @@ function locationAllows(job: FitJobInput, allow: LocationSpec[]): boolean {
 
     switch (spec.scope) {
       case "country":
-        return Boolean(country && tokensMatch(country, id));
+      case "region":
+        return geoMatchesSpec(country, city, id);
       case "city":
         return Boolean(city && tokensMatch(city, id));
-      case "region":
-        return Boolean(
-          (country && tokensMatch(country, id)) ||
-            (city && tokensMatch(city, id)),
-        );
       case "remote_tz":
         if (!isRemote) return false;
         if (

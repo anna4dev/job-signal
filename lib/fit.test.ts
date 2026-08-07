@@ -112,6 +112,138 @@ describe("fit()", () => {
     expect(result.hardFail).toBe(false);
   });
 
+  it("matches Germany under an EU region allow-list", () => {
+    const result = fit(
+      baseJob({
+        location_country: "Germany",
+        location_city: "Berlin",
+        location_remote: 0,
+        work_style: "onsite",
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["onsite"] },
+          locations: {
+            allow: [{ scope: "region", id: "EU" }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFailReasons).not.toContain("location_constraint");
+  });
+
+  it("matches Germany when EU was saved as scope country", () => {
+    const result = fit(
+      baseJob({
+        location_country: "Germany",
+        location_remote: 0,
+        work_style: "onsite",
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["onsite"] },
+          locations: {
+            allow: [{ scope: "country", id: "EU" }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFailReasons).not.toContain("location_constraint");
+  });
+
+  it("hard-fails a non-EU country against an EU allow-list", () => {
+    const result = fit(
+      baseJob({
+        location_country: "Singapore",
+        location_remote: 0,
+        work_style: "onsite",
+        location_visa_supported: 0,
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["onsite"] },
+          locations: {
+            allow: [{ scope: "region", id: "EU" }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFailReasons).toContain("location_constraint");
+  });
+
+  it("hard-fails United States against a Europe allow-list", () => {
+    // Pins exact membership: must not fuzzy-match via member "united kingdom".
+    const result = fit(
+      baseJob({
+        location_country: "United States",
+        location_remote: 0,
+        work_style: "onsite",
+        location_visa_supported: 0,
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["onsite"] },
+          locations: {
+            allow: [{ scope: "region", id: "Europe" }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFailReasons).toContain("location_constraint");
+  });
+
+  it("matches UAE under an EMEA allow-list", () => {
+    const result = fit(
+      baseJob({
+        location_country: "United Arab Emirates",
+        location_remote: 0,
+        work_style: "onsite",
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["onsite"] },
+          locations: {
+            allow: [{ scope: "region", id: "EMEA" }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFailReasons).not.toContain("location_constraint");
+  });
+
+  it("still hard-fails work mode when profile is remote-only for Berlin onsite", () => {
+    const result = fit(
+      baseJob({
+        location_country: "Germany",
+        location_city: "Berlin",
+        location_remote: 0,
+        work_style: "onsite",
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["remote"] },
+          locations: {
+            allow: [{ scope: "region", id: "EU" }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFailReasons).toContain("work_mode_constraint");
+    expect(result.hardFailReasons).not.toContain("location_constraint");
+  });
+
   it("hard-fails US remote against a Singapore location allow-list", () => {
     const result = fit(
       baseJob({
