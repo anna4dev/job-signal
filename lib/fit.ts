@@ -77,6 +77,213 @@ function isRemoteAnywhereId(id: string): boolean {
   );
 }
 
+/** Normalize common country aliases to a canonical English name. */
+const COUNTRY_CANON: Record<string, string> = {
+  de: "germany",
+  deutschland: "germany",
+  germany: "germany",
+  fr: "france",
+  france: "france",
+  nl: "netherlands",
+  holland: "netherlands",
+  netherlands: "netherlands",
+  ie: "ireland",
+  ireland: "ireland",
+  es: "spain",
+  spain: "spain",
+  it: "italy",
+  italy: "italy",
+  pt: "portugal",
+  portugal: "portugal",
+  be: "belgium",
+  belgium: "belgium",
+  at: "austria",
+  austria: "austria",
+  se: "sweden",
+  sweden: "sweden",
+  dk: "denmark",
+  denmark: "denmark",
+  fi: "finland",
+  finland: "finland",
+  pl: "poland",
+  poland: "poland",
+  cz: "czechia",
+  czechia: "czechia",
+  "czech republic": "czechia",
+  us: "united states",
+  usa: "united states",
+  "u.s.": "united states",
+  "u.s.a.": "united states",
+  "united states": "united states",
+  "united states of america": "united states",
+  ca: "canada",
+  canada: "canada",
+  mx: "mexico",
+  mexico: "mexico",
+  uk: "united kingdom",
+  "u.k.": "united kingdom",
+  britain: "united kingdom",
+  "great britain": "united kingdom",
+  england: "united kingdom",
+  "united kingdom": "united kingdom",
+  ch: "switzerland",
+  switzerland: "switzerland",
+  no: "norway",
+  norway: "norway",
+  sg: "singapore",
+  singapore: "singapore",
+  au: "australia",
+  australia: "australia",
+  nz: "new zealand",
+  "new zealand": "new zealand",
+  in: "india",
+  india: "india",
+  jp: "japan",
+  japan: "japan",
+  kr: "south korea",
+  "south korea": "south korea",
+  korea: "south korea",
+};
+
+function canonCountry(raw: string): string {
+  const c = canonical(raw);
+  return COUNTRY_CANON[c] ?? c;
+}
+
+/** Macro regions → canonical country members (profile id "EU" → Germany). */
+const REGION_MEMBERS: Record<string, readonly string[]> = {
+  eu: [
+    "austria",
+    "belgium",
+    "bulgaria",
+    "croatia",
+    "cyprus",
+    "czechia",
+    "denmark",
+    "estonia",
+    "finland",
+    "france",
+    "germany",
+    "greece",
+    "hungary",
+    "ireland",
+    "italy",
+    "latvia",
+    "lithuania",
+    "luxembourg",
+    "malta",
+    "netherlands",
+    "poland",
+    "portugal",
+    "romania",
+    "slovakia",
+    "slovenia",
+    "spain",
+    "sweden",
+  ],
+  europe: [
+    "austria",
+    "belgium",
+    "bulgaria",
+    "croatia",
+    "cyprus",
+    "czechia",
+    "denmark",
+    "estonia",
+    "finland",
+    "france",
+    "germany",
+    "greece",
+    "hungary",
+    "iceland",
+    "ireland",
+    "italy",
+    "latvia",
+    "lithuania",
+    "luxembourg",
+    "malta",
+    "netherlands",
+    "norway",
+    "poland",
+    "portugal",
+    "romania",
+    "slovakia",
+    "slovenia",
+    "spain",
+    "sweden",
+    "switzerland",
+    "united kingdom",
+  ],
+  na: ["united states", "canada", "mexico"],
+  "north america": ["united states", "canada", "mexico"],
+  uk: ["united kingdom"],
+  apac: [
+    "australia",
+    "new zealand",
+    "singapore",
+    "india",
+    "japan",
+    "south korea",
+    "hong kong",
+    "taiwan",
+    "indonesia",
+    "malaysia",
+    "philippines",
+    "thailand",
+    "vietnam",
+  ],
+  "asia pacific": [
+    "australia",
+    "new zealand",
+    "singapore",
+    "india",
+    "japan",
+    "south korea",
+    "hong kong",
+    "taiwan",
+    "indonesia",
+    "malaysia",
+    "philippines",
+    "thailand",
+    "vietnam",
+  ],
+  "south asia": ["india", "pakistan", "bangladesh", "sri lanka", "nepal"],
+};
+
+function regionKeyFor(allowId: string): string | null {
+  if (allowId === "eu" || allowId === "european union") return "eu";
+  if (allowId === "europe" || allowId === "emea") return "europe";
+  if (allowId === "na" || allowId === "north america") return "na";
+  if (allowId === "uk" || allowId === "united kingdom") return "uk";
+  if (allowId === "apac" || allowId === "asia pacific") return "apac";
+  if (allowId === "south asia") return "south asia";
+  return REGION_MEMBERS[allowId] ? allowId : null;
+}
+
+function countryInAllowRegion(country: string, allowId: string): boolean {
+  const key = regionKeyFor(allowId);
+  if (!key) return false;
+  const members = REGION_MEMBERS[key];
+  if (!members) return false;
+  const cc = canonCountry(country);
+  return members.some((m) => cc === m || tokensMatch(cc, m));
+}
+
+/** Direct country/city token match, alias canon, or macro-region membership. */
+function geoMatchesSpec(
+  country: string,
+  city: string,
+  specId: string,
+): boolean {
+  if (country) {
+    if (tokensMatch(country, specId)) return true;
+    if (canonCountry(country) === canonCountry(specId)) return true;
+    if (countryInAllowRegion(country, specId)) return true;
+  }
+  if (city && tokensMatch(city, specId)) return true;
+  return false;
+}
+
 function allowIncludesRemoteAnywhere(allow: LocationSpec[]): boolean {
   return allow.some(
     (spec) =>
@@ -98,7 +305,8 @@ function jobLacksGeography(job: FitJobInput): boolean {
  * Location allow-list = where the candidate can work from / relocate to.
  *
  * - Remote with a stated country/city must overlap the allow-list
- *   (Singapore profile ≠ US-only remote).
+ *   (Singapore profile ≠ US-only remote). Macro regions (EU, NA, …) expand
+ *   to member countries (EU covers Germany).
  * - Remote with no country/city (Location N/A) passes location regardless of
  *   profile allow-list — the JD did not constrain geography.
  * - Relocatable roles (onsite/hybrid) with job visa sponsorship bypass the
@@ -142,14 +350,10 @@ function locationAllows(job: FitJobInput, allow: LocationSpec[]): boolean {
 
     switch (spec.scope) {
       case "country":
-        return Boolean(country && tokensMatch(country, id));
+      case "region":
+        return geoMatchesSpec(country, city, id);
       case "city":
         return Boolean(city && tokensMatch(city, id));
-      case "region":
-        return Boolean(
-          (country && tokensMatch(country, id)) ||
-            (city && tokensMatch(city, id)),
-        );
       case "remote_tz":
         if (!isRemote) return false;
         if (
