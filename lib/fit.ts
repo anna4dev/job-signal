@@ -14,6 +14,10 @@ import type {
 } from "@/types/fit";
 import { parseTechStackField } from "@/lib/parseJobFields";
 import { canonCountry, countryInAllowRegion } from "@/lib/locationRegions";
+import {
+  roleTitleMatches,
+  skillPreferredMatchesJob,
+} from "@/lib/fitNormalize";
 
 // Re-export for ProfileContent / callers that need the shared macro check.
 export { isMacroRegionId } from "@/lib/locationRegions";
@@ -211,60 +215,26 @@ function timezoneOk(
 /**
  * Preference mass that matches job tokens. Preferences are pre-normalized
  * (sum≈1), so the result is already in [0, 1]. Empty preference list → null (skip).
+ * When skillAware, expand compounds like React/Next.js (TypeScript).
  */
 function preferenceCoverage(
   preferred: Weighted<ID>[],
   jobTokens: string[],
+  skillAware = false,
 ): number | null {
   if (preferred.length === 0) return null;
-  const jobKeys = jobTokens.map(canonical).filter(Boolean);
-  if (jobKeys.length === 0) return 0;
+  if (jobTokens.length === 0) return 0;
 
   let matched = 0;
   for (const item of preferred) {
     const key = canonical(item.value);
     if (!key) continue;
-    if (jobKeys.some((jk) => tokensMatch(jk, key))) {
-      matched += item.weight;
-    }
+    const hit = skillAware
+      ? skillPreferredMatchesJob(item.value, jobTokens)
+      : jobTokens.some((jk) => tokensMatch(canonical(jk), key));
+    if (hit) matched += item.weight;
   }
   return Math.min(1, Math.max(0, matched));
-}
-
-/**
- * Collapse punctuation/spaces so "full stack" ≈ "fullstack" ≈ "full-stack".
- */
-function compactRoleKey(s: string): string {
-  return canonical(s).replace(/[^a-z0-9]+/g, "");
-}
-
-/**
- * Role title vs preferred label. Exact/substring first, then compacted form
- * (fullstack ⊂ seniorfullstackengineer), then significant tokens (≥4 chars).
- */
-function roleTitleMatches(roleTitle: string, preferred: string): boolean {
-  const title = canonical(roleTitle);
-  const pref = canonical(preferred);
-  if (!title || !pref) return false;
-  if (tokensMatch(title, pref)) return true;
-
-  const titleCompact = compactRoleKey(title);
-  const prefCompact = compactRoleKey(pref);
-  if (
-    titleCompact.length >= MIN_FUZZY_LEN &&
-    prefCompact.length >= MIN_FUZZY_LEN &&
-    (titleCompact.includes(prefCompact) || prefCompact.includes(titleCompact))
-  ) {
-    return true;
-  }
-
-  const titleParts = new Set(
-    title.split(/[^a-z0-9]+/).filter((t) => t.length >= 4),
-  );
-  const prefParts = pref.split(/[^a-z0-9]+/).filter((t) => t.length >= 4);
-  return prefParts.some(
-    (tok) => titleParts.has(tok) || titleCompact.includes(tok),
-  );
 }
 
 function roleMatchScore(
@@ -329,8 +299,7 @@ function capabilitySkillScore(
   jobSkills: string[],
 ): number | null {
   if (skills.length === 0) return null;
-  const jobKeys = jobSkills.map(canonical).filter(Boolean);
-  if (jobKeys.length === 0) return 0;
+  if (jobSkills.length === 0) return 0;
 
   let matchedWeight = 0;
   let totalWeight = 0;
@@ -338,7 +307,7 @@ function capabilitySkillScore(
     totalWeight += item.weight;
     const key = canonical(item.value);
     if (!key) continue;
-    if (jobKeys.some((jk) => tokensMatch(jk, key))) {
+    if (skillPreferredMatchesJob(item.value, jobSkills)) {
       matchedWeight += item.weight;
     }
   }
@@ -533,7 +502,7 @@ function evaluateSoftFactors(
     pushFactor(out, "preference_role_match", role, W_ROLE, job.role_title);
   }
 
-  const skillPref = preferenceCoverage(pref.skills, job.tech_stack);
+  const skillPref = preferenceCoverage(pref.skills, job.tech_stack, true);
   if (skillPref != null) {
     pushFactor(out, "preference_skill_match", skillPref, W_SKILL_PREF);
   }
@@ -596,7 +565,7 @@ function evaluateSoftFactors(
 
   // Soft rejections (negative contributions)
   if (soft.skills?.length) {
-    const hit = preferenceCoverage(soft.skills, job.tech_stack);
+    const hit = preferenceCoverage(soft.skills, job.tech_stack, true);
     if (hit != null && hit > 0) {
       pushFactor(
         out,
