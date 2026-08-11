@@ -12,6 +12,8 @@ import {
   parseJobSortMode,
   type JobSortMode,
 } from "@/lib/jobSort";
+import { getJobStackAliasIndex } from "@/lib/jobTechStackCache";
+import { stackFilterExistsClauses } from "@/lib/jobTechStack";
 
 type QueryParam = string | number | null;
 export const revalidate = 300;
@@ -84,13 +86,15 @@ const getJobsPage = unstable_cache(
     }
 
     if (selectedStacks.length > 0) {
-      const stackPlaceholders = selectedStacks.map(() => "?").join(",");
-      whereParts.push(`(
-        SELECT COUNT(DISTINCT value)
-        FROM json_each(j.tech_stack)
-        WHERE value IN (${stackPlaceholders})
-      ) = ?`);
-      params.push(...selectedStacks, selectedStacks.length);
+      const stackIndex = await getJobStackAliasIndex();
+      const { sqlParts, args: stackArgs } = stackFilterExistsClauses(
+        selectedStacks,
+        stackIndex,
+      );
+      if (sqlParts.length > 0) {
+        whereParts.push(...sqlParts);
+        params.push(...stackArgs);
+      }
     }
 
     if (filters.isRemote) {

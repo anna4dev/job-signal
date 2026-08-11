@@ -26,7 +26,7 @@ export default function StackFilter({
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch("/api/jobs/stack")
+    fetch("/api/jobs/stack", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) setOptions(data);
