@@ -50,10 +50,54 @@ function makeProfileFetch(type: string) {
       .catch(() => []);
 }
 
+/** My skills ← required_skills suggestions API. */
 const fetchSkills = makeProfileFetch("skills");
 const fetchIndustries = makeProfileFetch("industries");
 const fetchRoles = makeProfileFetch("roles");
 const fetchLocations = makeProfileFetch("locations");
+
+/**
+ * Tech want / don't ← same canonical list as homepage StackFilter (/api/jobs/stack).
+ * Load once, filter client-side (list is hundreds of chips, not thousands).
+ */
+let jobStackNamesCache: string[] | null = null;
+let jobStackNamesInflight: Promise<string[]> | null = null;
+
+function loadJobStackNames(): Promise<string[]> {
+  if (jobStackNamesCache) return Promise.resolve(jobStackNamesCache);
+  if (jobStackNamesInflight) return jobStackNamesInflight;
+  jobStackNamesInflight = fetch("/api/jobs/stack", { cache: "no-store" })
+    .then((r) => r.json())
+    .then((data: unknown) => {
+      const names = Array.isArray(data)
+        ? data
+            .map((row) =>
+              row &&
+              typeof row === "object" &&
+              typeof (row as { name?: unknown }).name === "string"
+                ? (row as { name: string }).name
+                : "",
+            )
+            .filter(Boolean)
+        : [];
+      jobStackNamesCache = names;
+      return names;
+    })
+    .catch(() => [])
+    .finally(() => {
+      jobStackNamesInflight = null;
+    });
+  return jobStackNamesInflight;
+}
+
+async function fetchTechStack(q: string): Promise<string[]> {
+  const names = await loadJobStackNames();
+  const needle = q.trim().toLowerCase();
+  if (!needle) return [];
+  return names
+    .filter((n) => n.toLowerCase().includes(needle))
+    .slice(0, 10);
+}
 
 // Whitelist for runtime validation of WorkMode values from suggestions / external sources.
 // Keeps applyWorkModesSuggestion from persisting arbitrary strings as WorkMode.
@@ -708,7 +752,7 @@ export default function ProfileContent() {
                   skills: removeTag(profile.capabilities.skills, v),
                 })
               }
-              placeholder="Search or add a skill (e.g. Python, React, AWS)"
+              placeholder="Search or add a skill (e.g. TypeScript, Communication)"
               fetchSuggestions={fetchSkills}
             />
           </div>
@@ -796,7 +840,7 @@ export default function ProfileContent() {
                 })
               }
               placeholder="Search or add tech (e.g. Go, Kubernetes, Rust)"
-              fetchSuggestions={fetchSkills}
+              fetchSuggestions={fetchTechStack}
             />
             {skillsSuggestion && (
               <SuggestionRow
@@ -895,7 +939,7 @@ export default function ProfileContent() {
                 patchRejSoft({ skills: removeTag(profile.rejections.soft.skills ?? [], v) })
               }
               placeholder="Search or add tech to avoid (e.g. PHP, COBOL)"
-              fetchSuggestions={fetchSkills}
+              fetchSuggestions={fetchTechStack}
             />
           </div>
 

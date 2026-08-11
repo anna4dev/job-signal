@@ -62,8 +62,9 @@ Each job page includes:
     | location_visa_supported | BOOLEAN | Whether visa sponsorship is available. |
     | location_extra | JSON | Additional location-related details. |
     | responsibilities | JSON | List of job responsibilities. |
-    | required_skills | JSON | Required skills for the job. |
-    | preferred_skills | JSON | Preferred or optional skills. |
+    | required_skills | JSON | JD-required abilities/experience (tech and soft/domain skills). Fit `capabilities.skills`; Profile **My skills**. |
+    | preferred_skills | JSON | Preferred or optional skills from the JD. |
+    | tech_stack | JSON | Tech tags for this posting (tools/languages/frameworks). Homepage filter + Profile **Tech I want/don't**; fit preferences/rejections. |
     | job_raw_id | TEXT | Reference to the raw job record. |
     | confidence | TEXT | 'high','medium','low' |
     | salary_min | NUMERIC | Minimum salary estimate. |
@@ -92,7 +93,7 @@ Each job page includes:
     | size | TEXT | Company size (e.g., "1-10 people", "11-50 people", "51-200 people", "201-500 people", "501-1000 people", "1000+ people"). |
     | funding_stage | TEXT | Funding stage (e.g., "Bootstrapped", "Seed", "Series A", "Series B", "Series C", "Series D+", "Profitable", "Public", "Unknown"). |
     | total_funding_usd | NUMERIC | Total funding amount in USD. |
-    | tech_stack | JSON | Technologies used by the company. |
+    | tech_stack | JSON | Company-level tech ecosystem (may include Tavily enrichment). Company pages only — not homepage filter / profile tech chips. |
     | culture_keywords | JSON | Keywords describing company culture. |
     | recent_news | JSON | Recent news items about the company. |
     | competitor_companies | JSON | List of competitor company names. |
