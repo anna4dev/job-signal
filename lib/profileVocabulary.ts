@@ -1,9 +1,13 @@
 /**
- * Profile vocabulary 收口: map free-text / DB suggestion variants onto a
- * small set of display labels before persisting ExplicitProfile.
+ * Profile vocabulary 收口.
  *
- * Job-side mess (React/Next.js (TypeScript) on a JD) is handled separately in
- * lib/fitNormalize.ts at match time — do not conflate the two.
+ * Skills: expand compounds + alias → display chips (small map).
+ * Roles: **rules first**, not an endless title→chip dictionary:
+ *   1) strip specialty tails (parens / comma / " - …")
+ *   2) strip seniority + plural noise
+ *   3) a short list of *families* only where structure alone is ambiguous
+ *   4) language-primary titles (Rust/Python/…) → "{Lang} Engineer"
+ * Job-side JD mess stays in lib/fitNormalize.ts.
  */
 
 import {
@@ -44,7 +48,10 @@ const SKILL_DISPLAY: Record<string, string> = {
   azure: "Azure",
 };
 
-/** Role family → single Target role chip. */
+/**
+ * Small family map — only for titles that rules cannot safely invent
+ * (co-founder spellings, GTM, BDR, frontend≈front-end, …).
+ */
 const ROLE_FAMILY_DISPLAY: Record<string, string> = {
   frontend: "Frontend Engineer",
   backend: "Backend Engineer",
@@ -62,10 +69,11 @@ const ROLE_FAMILY_DISPLAY: Record<string, string> = {
   ai_associate: "AI Associate",
   llm: "LLM Engineer",
   bayesian: "Bayesian Software Engineer",
-  python_eng: "Python Engineer",
   category_theory: "Applied Category Theory",
   gtm: "Go-to-Market",
   bdr: "BDR",
+  account_executive: "Account Executive",
+  mts: "Member of Technical Staff",
   dotnet: ".NET Engineer",
   dotnet_architect: ".NET Architect",
   network: "Network Engineer",
@@ -80,20 +88,40 @@ const ROLE_FAMILY_DISPLAY: Record<string, string> = {
   design: "Designer",
 };
 
+const LANG_ROLE_DISPLAY: Record<string, string> = {
+  rust: "Rust Engineer",
+  python: "Python Engineer",
+  go: "Go Engineer",
+  java: "Java Engineer",
+  kotlin: "Kotlin Engineer",
+  swift: "Swift Engineer",
+  ruby: "Ruby Engineer",
+  php: "PHP Engineer",
+  scala: "Scala Engineer",
+  typescript: "TypeScript Engineer",
+  javascript: "JavaScript Engineer",
+  csharp: ".NET Engineer",
+};
+
+const SMALL_TITLE_WORDS = new Set(["of", "and", "the", "for", "to", "in", "on"]);
+
 function titleCaseWords(s: string): string {
   return s
     .split(/\s+/)
     .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .map((w, i) => {
+      const lower = w.toLowerCase();
+      if (i > 0 && SMALL_TITLE_WORDS.has(lower)) return lower;
+      if (lower === ".net") return ".NET";
+      return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    })
     .join(" ");
 }
 
 function skillDisplayForKey(key: string, fallbackRaw: string): string {
   if (SKILL_DISPLAY[key]) return SKILL_DISPLAY[key];
-  // Unknown skill: light cleanup, keep readable casing from first letter.
   const cleaned = fallbackRaw.trim().replace(/\s+/g, " ");
   if (!cleaned) return key;
-  // Prefer known dotted forms already cleaned via key
   if (key === cleaned.toLowerCase().replace(/[^a-z0-9]+/g, "")) {
     return titleCaseWords(cleaned.replace(/-/g, " "));
   }
@@ -120,8 +148,68 @@ export function canonicalizeSkillsForProfile(raw: string): string[] {
 }
 
 /**
- * Ordered, specific-first family detection. More specific titles must win over
- * generic "ai" → ML or bare "engineer" fallbacks.
+ * Structural cleanup shared by unknown titles:
+ * drop specialty tails, seniority, plurals, and a few redundant suffixes.
+ */
+export function structuralCoreTitle(raw: string): string {
+  let s = raw.trim();
+  if (!s) return "";
+
+  // Parenthetical specialty: "Foo (bar)" → Foo
+  s = s.replace(/\([^)]*\)/g, " ");
+  // Head before comma / em-dash / " - " specialty clause
+  s = (s.split(/\s*[,–—]\s*|\s+-\s+/)[0] ?? s).trim();
+  s = s.replace(/\s+/g, " ").trim();
+
+  // Leading seniority / level noise (may repeat: "Senior Lead …")
+  for (let i = 0; i < 3; i++) {
+    const next = s.replace(
+      /^(junior|senior|staff|principal|lead|intern|experienced|expierenced|associate)\s+/i,
+      "",
+    );
+    if (next === s) break;
+    s = next;
+  }
+
+  // Plural job nouns
+  s = s.replace(
+    /\b(engineers|developers|executives|managers|scientists|researchers|associates)\b/gi,
+    (_m, w: string) => w.slice(0, -1),
+  );
+
+  // Account Exec* / Account Executive Sales → Account Executive
+  s = s.replace(/\baccount\s+executives?\b/gi, "Account Executive");
+  s = s.replace(/\baccount\s+execs?\b/gi, "Account Executive");
+  s = s.replace(/\baccount\s+executive\s+sales\b/gi, "Account Executive");
+
+  // "Developer Engineer" → Developer; "Engineering" trailing noise already singularized
+  s = s.replace(/\bdeveloper\s+engineer\b/gi, "Developer");
+
+  // "Software Engineering" as trailing noun → Engineer when paired with a domain
+  s = s.replace(/\bsoftware\s+engineering\b/gi, "Software Engineer");
+
+  return s.replace(/\s+/g, " ").trim();
+}
+
+function languageRoleChip(core: string): string | null {
+  const phrase = normalizeRolePhrase(core);
+  const compact = phrase.replace(/[^a-z0-9]+/g, "");
+  if (!/(developer|engineer|distributed)/.test(compact)) return null;
+
+  for (const [lang, label] of Object.entries(LANG_ROLE_DISPLAY)) {
+    if (lang === "go") {
+      if (/(?:^|[^a-z])go(?:[^a-z]|$)/.test(phrase) || compact.startsWith("go")) {
+        return label;
+      }
+      continue;
+    }
+    if (compact.includes(lang) || phrase.includes(lang)) return label;
+  }
+  return null;
+}
+
+/**
+ * Ordered family detection for ambiguous / branded titles only.
  */
 function detectRoleFamilies(raw: string): string[] {
   const phrase = normalizeRolePhrase(raw);
@@ -136,13 +224,11 @@ function detectRoleFamilies(raw: string): string[] {
     add(family);
     return families;
   };
-  // "ai" is len 2 so it never appears in significantRoleTokens — use phrase/compact.
   const hasAi =
     compact.startsWith("ai") ||
     compact.includes("ainative") ||
     /(?:^|[^a-z])ai(?:[^a-z]|$)/.test(phrase);
 
-  // Founder's / Founder / Founders Associate
   if (
     compact.includes("founderassociate") ||
     compact.includes("foundersassociate") ||
@@ -151,7 +237,6 @@ function detectRoleFamilies(raw: string): string[] {
     return only("founder_associate");
   }
 
-  // 2nd / AI founding engineer → Founding Engineer
   if (
     compact.includes("foundingengineer") ||
     (compact.includes("founding") &&
@@ -160,7 +245,6 @@ function detectRoleFamilies(raw: string): string[] {
     return only("founding_engineer");
   }
 
-  // CTO + Co-Founder (any order) vs Co-Founder alone vs CTO alone
   const hasCto = tokens.has("cto") || /(?:^|[^a-z])cto(?:[^a-z]|$)/.test(phrase);
   const hasCofounder =
     compact.includes("cofounder") || phrase.includes("co founder");
@@ -168,12 +252,10 @@ function detectRoleFamilies(raw: string): string[] {
   if (hasCofounder) return only("cofounder");
   if (hasCto) return only("cto");
 
-  // Applied category theory research(er)
   if (compact.includes("categorytheory") || phrase.includes("category theory")) {
     return only("category_theory");
   }
 
-  // Go-to-market / GTM
   if (
     compact.includes("gotomarket") ||
     compact === "gtm" ||
@@ -183,12 +265,27 @@ function detectRoleFamilies(raw: string): string[] {
     return only("gtm");
   }
 
-  // BDR
   if (tokens.has("bdr") || compact === "bdr" || compact.startsWith("bdr")) {
     return only("bdr");
   }
 
-  // Project / delivery manager (IT, AI, technical, senior, tether wallet, …)
+  // Account Executive (after structural cleanup also handles; catch raw variants here)
+  if (
+    compact.includes("accountexecutive") ||
+    compact.includes("accountexec") ||
+    phrase.includes("account exec")
+  ) {
+    return only("account_executive");
+  }
+
+  if (
+    compact.includes("memberoftechnicalstaff") ||
+    compact.includes("memberoftechstaff") ||
+    phrase.includes("member of technical staff")
+  ) {
+    return only("mts");
+  }
+
   if (
     compact.includes("projectmanager") ||
     (compact.includes("delivery") && compact.includes("manager")) ||
@@ -198,15 +295,9 @@ function detectRoleFamilies(raw: string): string[] {
     return only("project_manager");
   }
 
-  // Bayesian software engineer / engineering
   if (compact.includes("bayesian")) return only("bayesian");
+  if (tokens.has("llm") || compact.includes("llm")) return only("llm");
 
-  // LLM engineer family (incl. typo inferrence → inference via normalize)
-  if (tokens.has("llm") || compact.includes("llm")) {
-    return only("llm");
-  }
-
-  // AI research* wins over inference-in-parens specialties
   if (
     compact.includes("airesearch") ||
     compact.includes("researchscientist") ||
@@ -219,17 +310,12 @@ function detectRoleFamilies(raw: string): string[] {
     return only("ai_research");
   }
 
-  // AI Inference Engineer (+ qvac / specialty tags)
   if (compact.includes("inference") || phrase.includes("inference")) {
     return only("ai_inference");
   }
 
-  // AI Delivery Intern / Lead
-  if (compact.includes("delivery") && hasAi) {
-    return only("ai_delivery");
-  }
+  if (compact.includes("delivery") && hasAi) return only("ai_delivery");
 
-  // AI Agent Engineer
   if (
     compact.includes("agentengineer") ||
     (compact.includes("agent") && compact.includes("engineer"))
@@ -237,15 +323,10 @@ function detectRoleFamilies(raw: string): string[] {
     return only("ai_agent");
   }
 
-  // AI Systems / System Engineer
-  if (
-    (compact.includes("system") || compact.includes("systems")) &&
-    hasAi
-  ) {
+  if ((compact.includes("system") || compact.includes("systems")) && hasAi) {
     return only("ai_systems");
   }
 
-  // AI Associate / AI Development associate
   if (
     compact.includes("aiassociate") ||
     compact.includes("aidevelopmentassociate") ||
@@ -254,7 +335,6 @@ function detectRoleFamilies(raw: string): string[] {
     return only("ai_associate");
   }
 
-  // AI native / AI software engineer
   if (
     hasAi &&
     (compact.includes("software") ||
@@ -265,7 +345,6 @@ function detectRoleFamilies(raw: string): string[] {
     return only("ai_swe");
   }
 
-  // .NET Architect vs .NET / C# engineer
   if (
     compact.includes("dotnet") ||
     tokens.has("csharp") ||
@@ -276,19 +355,7 @@ function detectRoleFamilies(raw: string): string[] {
     return only("dotnet");
   }
 
-  // Network / Networking Engineer(s)
-  if (compact.includes("network")) {
-    return only("network");
-  }
-
-  // Python-primary engineer titles
-  if (
-    tokens.has("python") ||
-    compact.startsWith("python") ||
-    /python(?:developer|engineer|software)/.test(compact)
-  ) {
-    return only("python_eng");
-  }
+  if (compact.includes("network")) return only("network");
 
   const has = (family: string, ...needles: string[]) => {
     if (
@@ -320,20 +387,26 @@ function detectRoleFamilies(raw: string): string[] {
 
 /**
  * Map role free-text / suggestion onto one or more Target role chips.
- * "front-end developer" → ["Frontend Engineer"]
- * "ai product engineer (fullstack)" → ["Fullstack Engineer", "Product Engineer"]
+ * Prefers structural rules; families only when needed.
  */
 export function canonicalizeRolesForProfile(raw: string): string[] {
-  const families = detectRoleFamilies(raw);
-  if (families.length > 0) {
-    return families.map((f) => ROLE_FAMILY_DISPLAY[f]).filter(Boolean);
+  const fromRaw = detectRoleFamilies(raw);
+  if (fromRaw.length > 0) {
+    return fromRaw.map((f) => ROLE_FAMILY_DISPLAY[f]).filter(Boolean);
   }
-  const cleaned = raw
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/[/_]+/g, " ");
-  if (!cleaned) return [];
-  return [titleCaseWords(cleaned)];
+
+  const core = structuralCoreTitle(raw);
+  if (!core) return [];
+
+  const fromCore = detectRoleFamilies(core);
+  if (fromCore.length > 0) {
+    return fromCore.map((f) => ROLE_FAMILY_DISPLAY[f]).filter(Boolean);
+  }
+
+  const lang = languageRoleChip(core);
+  if (lang) return [lang];
+
+  return [titleCaseWords(core)];
 }
 
 /** Dedupe key for profile tag equality (canonical skills/roles). */

@@ -195,4 +195,65 @@ describe("profileVocabulary roles", () => {
       ]);
     }
   });
+
+  it("uses structural rules for seniority, specialty tails, and plurals", () => {
+    expect(canonicalizeRolesForProfile("Junior Quantitative Developer")).toEqual([
+      "Quantitative Developer",
+    ]);
+    expect(
+      canonicalizeRolesForProfile("Lead Quantitative Developer Engineer"),
+    ).toEqual(["Quantitative Developer"]);
+    expect(
+      canonicalizeRolesForProfile(
+        "Domain Expert - Valuation, Quantitative Default-probability, Or Interest Rate Prediction Models",
+      ),
+    ).toEqual(["Domain Expert"]);
+    expect(
+      canonicalizeRolesForProfile(
+        "Member Of Technical Staff, Fault Tolerant Quantum Compilation + Simulations",
+      ),
+    ).toEqual(["Member of Technical Staff"]);
+    expect(canonicalizeRolesForProfile("Cloud Infrastructure Engineers")).toEqual([
+      "Cloud Infrastructure Engineer",
+    ]);
+    expect(canonicalizeRolesForProfile("Cloud Infrastructure Engineer")).toEqual([
+      "Cloud Infrastructure Engineer",
+    ]);
+    expect(
+      canonicalizeRolesForProfile("Application Software Engineer, Endpoint Security"),
+    ).toEqual(["Application Software Engineer"]);
+    expect(
+      canonicalizeRolesForProfile(
+        "Autonomy Engineer, Fixed Wing Planning & Controls",
+      ),
+    ).toEqual(["Autonomy Engineer"]);
+  });
+
+  it("maps language-primary titles via rules, not per-company aliases", () => {
+    expect(canonicalizeRolesForProfile("Rust Developer")).toEqual([
+      "Rust Engineer",
+    ]);
+    expect(canonicalizeRolesForProfile("Rust Developer - Polycentric")).toEqual([
+      "Rust Engineer",
+    ]);
+    expect(canonicalizeRolesForProfile("Rust Distributed Engineer")).toEqual([
+      "Rust Engineer",
+    ]);
+  });
+
+  it("收口 Account Executive variants structurally", () => {
+    for (const raw of [
+      "Account Executive",
+      "Account Executive (defense And Aerospace)",
+      "Account Exec",
+      "Account Executive Sales",
+      "Account Executive, Defense & Aerospace",
+      "Account Executives",
+      "Associate Account Executive",
+    ]) {
+      expect(canonicalizeRolesForProfile(raw), raw).toEqual([
+        "Account Executive",
+      ]);
+    }
+  });
 });
