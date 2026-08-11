@@ -231,22 +231,64 @@ function preferenceCoverage(
   return Math.min(1, Math.max(0, matched));
 }
 
+/**
+ * Collapse punctuation/spaces so "full stack" ≈ "fullstack" ≈ "full-stack".
+ */
+function compactRoleKey(s: string): string {
+  return canonical(s).replace(/[^a-z0-9]+/g, "");
+}
+
+/**
+ * Role title vs preferred label. Exact/substring first, then compacted form
+ * (fullstack ⊂ seniorfullstackengineer), then significant tokens (≥4 chars).
+ */
+function roleTitleMatches(roleTitle: string, preferred: string): boolean {
+  const title = canonical(roleTitle);
+  const pref = canonical(preferred);
+  if (!title || !pref) return false;
+  if (tokensMatch(title, pref)) return true;
+
+  const titleCompact = compactRoleKey(title);
+  const prefCompact = compactRoleKey(pref);
+  if (
+    titleCompact.length >= MIN_FUZZY_LEN &&
+    prefCompact.length >= MIN_FUZZY_LEN &&
+    (titleCompact.includes(prefCompact) || prefCompact.includes(titleCompact))
+  ) {
+    return true;
+  }
+
+  const titleParts = new Set(
+    title.split(/[^a-z0-9]+/).filter((t) => t.length >= 4),
+  );
+  const prefParts = pref.split(/[^a-z0-9]+/).filter((t) => t.length >= 4);
+  return prefParts.some(
+    (tok) => titleParts.has(tok) || titleCompact.includes(tok),
+  );
+}
+
 function roleMatchScore(
   preferred: Weighted<ID>[],
   roleTitle: string,
 ): number | null {
   if (preferred.length === 0) return null;
-  const title = canonical(roleTitle);
-  if (!title) return 0;
+  if (!canonical(roleTitle)) return 0;
   let matched = 0;
   for (const item of preferred) {
     const key = canonical(item.value);
     if (!key) continue;
-    if (tokensMatch(title, key)) {
+    if (roleTitleMatches(roleTitle, item.value)) {
       matched += item.weight;
     }
   }
   return Math.min(1, Math.max(0, matched));
+}
+
+/** Explicit Target roles only — ignore bookmark-inferred implicit roles for hard gate. */
+function explicitTargetRoles(
+  roles: Weighted<ID>[],
+): Weighted<ID>[] {
+  return roles.filter((r) => r.source !== "implicit");
 }
 
 function salaryMatchScore(
@@ -414,10 +456,11 @@ function evaluateHardConstraints(
     if (!ok) failed.push("location_constraint");
   }
 
-  // Target roles (preferences): when set, act as a hard title allow-list.
-  // Location/work mode only gate eligibility; role+skills decide fit quality.
-  if (signals.preferences.roles.length > 0) {
-    const roleScore = roleMatchScore(signals.preferences.roles, job.role_title);
+  // Explicit Target roles only (not bookmark-inferred implicit roles).
+  // Location/work mode gate eligibility; explicit roles gate title family.
+  const targetRoles = explicitTargetRoles(signals.preferences.roles);
+  if (targetRoles.length > 0) {
+    const roleScore = roleMatchScore(targetRoles, job.role_title);
     const ok = roleScore != null && roleScore > 0;
     breakdown.push({
       key: "role_constraint",
@@ -499,12 +542,13 @@ function evaluateSoftFactors(
     pref.industries,
     job.industry ? [job.industry] : [],
   );
-  if (industry != null) {
+  // Secondary dims: only boost when they hit — zeros must not drag role/skill.
+  if (industry != null && industry > 0) {
     pushFactor(out, "preference_industry_match", industry, W_INDUSTRY, job.industry ?? undefined);
   }
 
   const size = preferenceCoverage(pref.companySizes, job.size ? [job.size] : []);
-  if (size != null) {
+  if (size != null && size > 0) {
     pushFactor(out, "preference_company_size_match", size, W_SIZE, job.size ?? undefined);
   }
 
@@ -512,7 +556,7 @@ function evaluateSoftFactors(
     pref.fundingStages,
     job.funding_stage ? [job.funding_stage] : [],
   );
-  if (funding != null) {
+  if (funding != null && funding > 0) {
     pushFactor(
       out,
       "preference_funding_stage_match",
@@ -525,9 +569,9 @@ function evaluateSoftFactors(
   if (pref.workMode && pref.workMode.length > 0) {
     const modeHit = pref.workMode.find((m) => m.value === jobMode);
     const score = modeHit ? Math.min(1, modeHit.weight) : 0;
-    // Prefer absolute match quality: if workMode is normalized, weight of matched mode is the score.
-    // If multiple modes, sum of matching weights (at most one mode matches).
-    pushFactor(out, "preference_work_mode_match", score, W_WORK_MODE_PREF, jobMode);
+    if (score > 0) {
+      pushFactor(out, "preference_work_mode_match", score, W_WORK_MODE_PREF, jobMode);
+    }
   }
 
   if (pref.salary) {

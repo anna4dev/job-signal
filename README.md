@@ -392,7 +392,7 @@ _Goal: Ship practical matching with clear reasons, not black-box scoring._
 - Deterministic `fit(job, unifiedSignals)` outputs `fitScore + reasonTags + factorBreakdown`.
 - Hard constraints unmet → `fitScore = 0`; preferences are pre-normalized (no `normalizeWeights` in fit).
 - Location hard-constraint: stated job geography must overlap the allow-list (macro regions like `EU`/`NA` expand to member countries); remote with no country/city (Location N/A) passes; onsite/hybrid with job visa may relocate outside the allow-list; named-country remote is not unlocked by visa; profile `Remote` / worldwide tags still opt into remote-anywhere. See `AGENTS.md` and `lib/fit.ts` `locationAllows`.
-- Soft ranking: location/work mode are gates only; **roles + skills outweigh** industry/level. Non-empty Target roles hard-fail unmatched titles (`role_constraint`).
+- Soft ranking: location/work mode are gates only; **explicit roles + skills outweigh** industry/level. Explicit Target roles hard-fail unmatched titles (`role_constraint`); implicit roles do not. Role matching treats `full stack` ≈ `fullstack`.
 
 - [x] **3.2 Best Fit View + Sort Toggle**
 - Toggle `Best Fit`, `Newest`, `Highest Pay` via `sort` query param.

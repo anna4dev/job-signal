@@ -540,6 +540,132 @@ describe("fit()", () => {
     expect(result.reasonTags).toContain("Role mismatch");
   });
 
+  it("does not hard-fail on implicit-only roles when explicit Target roles are empty", () => {
+    const result = fit(
+      baseJob({
+        role_title: "Senior Fullstack Engineer",
+        location_remote: 1,
+        location_country: null,
+        tech_stack: ["React"],
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["remote"] },
+          locations: { allow: [] },
+          employmentTypes: [],
+        },
+        preferences: {
+          roles: [{ value: "CEO", weight: 0.2, source: "implicit" }],
+          skills: [],
+          industries: [],
+          companySizes: [],
+          fundingStages: [],
+        },
+        capabilities: {
+          skills: [{ value: "React", weight: 1, source: "explicit" }],
+          yearsOfExperience: 5,
+          seniorityLevel: "senior",
+        },
+      }),
+    );
+    expect(result.hardFailReasons).not.toContain("role_constraint");
+    expect(result.hardFail).toBe(false);
+  });
+
+  it("matches full stack / fullstack aliases against Senior Fullstack Engineer", () => {
+    for (const role of [
+      "fullstack",
+      "Full Stack",
+      "ai / fullstack",
+      "ai product engineer (fullstack)",
+    ]) {
+      const result = fit(
+        baseJob({
+          role_title: "Senior Fullstack Engineer",
+          location_remote: 1,
+          location_country: null,
+          tech_stack: ["React"],
+        }),
+        emptySignals({
+          hardConstraints: {
+            visa: { required: false },
+            work: { modes: ["remote"] },
+            locations: { allow: [] },
+            employmentTypes: [],
+          },
+          preferences: {
+            roles: [{ value: role, weight: 1, source: "explicit" }],
+            skills: [],
+            industries: [],
+            companySizes: [],
+            fundingStages: [],
+          },
+        }),
+      );
+      expect(result.hardFailReasons, role).not.toContain("role_constraint");
+    }
+  });
+
+  it("does not let zero industry/size drag down a strong role+stack match", () => {
+    const result = fit(
+      baseJob({
+        role_title: "Full Stack AI Engineer",
+        level: "senior",
+        location_remote: 1,
+        location_country: null,
+        tech_stack: [
+          "Next.js",
+          "React",
+          "TypeScript",
+          "Node.js",
+          "PostgreSQL",
+          "Docker",
+        ],
+        industry: "Other",
+        size: "1-10 people",
+        salary_min: 30000,
+        salary_max: 90000,
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["remote"] },
+          locations: { allow: [] },
+          employmentTypes: [],
+        },
+        preferences: {
+          roles: [
+            { value: "Full Stack Engineer", weight: 1, source: "explicit" },
+          ],
+          skills: [
+            { value: "React", weight: 0.25, source: "explicit" },
+            { value: "TypeScript", weight: 0.25, source: "explicit" },
+            { value: "Next.js", weight: 0.25, source: "explicit" },
+            { value: "Node.js", weight: 0.25, source: "explicit" },
+          ],
+          industries: [{ value: "SaaS", weight: 1, source: "explicit" }],
+          companySizes: [
+            { value: "201-500 people", weight: 1, source: "explicit" },
+          ],
+          fundingStages: [],
+        },
+        capabilities: {
+          skills: [
+            { value: "React", weight: 1, source: "explicit" },
+            { value: "TypeScript", weight: 1, source: "explicit" },
+            { value: "Next.js", weight: 1, source: "explicit" },
+            { value: "Node.js", weight: 1, source: "explicit" },
+          ],
+          yearsOfExperience: 5,
+          seniorityLevel: "senior",
+        },
+      }),
+    );
+    expect(result.hardFail).toBe(false);
+    expect(result.fitScore).toBeGreaterThanOrEqual(70);
+  });
+
   it("scores skill mismatch far below level/industry when roles are empty", () => {
     const engOnly = emptySignals({
       capabilities: {
