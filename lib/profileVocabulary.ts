@@ -182,6 +182,9 @@ export function structuralCoreTitle(raw: string): string {
   s = s.replace(/\baccount\s+execs?\b/gi, "Account Executive");
   s = s.replace(/\baccount\s+executive\s+sales\b/gi, "Account Executive");
 
+  // Executive Assistant to CEO / to the CEO / to Founder → Executive Assistant
+  s = s.replace(/\bexecutive\s+assistant\s+to\s+.+$/i, "Executive Assistant");
+
   // "Developer Engineer" → Developer; "Engineering" trailing noise already singularized
   s = s.replace(/\bdeveloper\s+engineer\b/gi, "Developer");
 

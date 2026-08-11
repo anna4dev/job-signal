@@ -256,4 +256,22 @@ describe("profileVocabulary roles", () => {
       ]);
     }
   });
+
+  it("keeps BD/CS Executive distinct; collapses EA-to-CEO", () => {
+    expect(
+      canonicalizeRolesForProfile("Business Development Executive"),
+    ).toEqual(["Business Development Executive"]);
+    expect(
+      canonicalizeRolesForProfile("Customer Support Executive"),
+    ).toEqual(["Customer Support Executive"]);
+    expect(canonicalizeRolesForProfile("Executive Assistant")).toEqual([
+      "Executive Assistant",
+    ]);
+    expect(
+      canonicalizeRolesForProfile("Executive Assistant to Ceo"),
+    ).toEqual(["Executive Assistant"]);
+    expect(
+      canonicalizeRolesForProfile("Executive Assistant to the Ceo"),
+    ).toEqual(["Executive Assistant"]);
+  });
 });
