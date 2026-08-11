@@ -33,6 +33,11 @@ import type {
 } from "@/types/profile";
 import type { JobLevel } from "@/types/job";
 import { isMacroRegionId } from "@/lib/locationRegions";
+import {
+  canonicalizeRolesForProfile,
+  canonicalizeSkillsForProfile,
+  profileTagKey,
+} from "@/lib/profileVocabulary";
 
 // ── Stable fetch helpers (module-level = stable reference, safe in useEffect deps) ──
 
@@ -273,13 +278,35 @@ function toTags(items: Weighted<ID>[]): string[] {
 }
 
 function addTag(items: Weighted<ID>[], value: string): Weighted<ID>[] {
-  if (items.some((i) => i.value.toLowerCase() === value.toLowerCase()))
+  if (items.some((i) => profileTagKey(i.value) === profileTagKey(value)))
     return items;
   return [...items, { value, weight: 1, source: "explicit" as const }];
 }
 
+function addCanonicalSkillTags(
+  items: Weighted<ID>[],
+  raw: string,
+): Weighted<ID>[] {
+  let next = items;
+  for (const v of canonicalizeSkillsForProfile(raw)) {
+    next = addTag(next, v);
+  }
+  return next;
+}
+
+function addCanonicalRoleTags(
+  items: Weighted<ID>[],
+  raw: string,
+): Weighted<ID>[] {
+  let next = items;
+  for (const v of canonicalizeRolesForProfile(raw)) {
+    next = addTag(next, v);
+  }
+  return next;
+}
+
 function removeTag(items: Weighted<ID>[], value: string): Weighted<ID>[] {
-  return items.filter((i) => i.value.toLowerCase() !== value.toLowerCase());
+  return items.filter((i) => profileTagKey(i.value) !== profileTagKey(value));
 }
 
 function toggleWeightedChip(
@@ -464,13 +491,21 @@ export default function ProfileContent() {
   // ── Suggestion appliers (assist-fill V1) ──────────────────────────────────
 
   function applySkillsSuggestion(values: string[]) {
-    const existing = profile.preferences.skills;
-    const existingLower = new Set(existing.map((s) => s.value.toLowerCase()));
-    const additions: Weighted<ID>[] = values
-      .filter((v) => !existingLower.has(v.toLowerCase()))
-      .map((v) => ({ value: v, weight: 1, source: "implicit" as const }));
-    if (additions.length === 0) return;
-    patchPref({ skills: [...existing, ...additions] });
+    let next = profile.preferences.skills;
+    for (const raw of values) {
+      next = addCanonicalSkillTags(next, raw);
+    }
+    // Assist-fill marks newly applied suggestion skills as implicit source.
+    const before = new Set(
+      profile.preferences.skills.map((s) => profileTagKey(s.value)),
+    );
+    next = next.map((s) =>
+      before.has(profileTagKey(s.value))
+        ? s
+        : { ...s, source: "implicit" as const },
+    );
+    if (next.length === profile.preferences.skills.length) return;
+    patchPref({ skills: next });
   }
 
   function applyWorkModesSuggestion(values: string[]) {
@@ -663,8 +698,16 @@ export default function ProfileContent() {
             <FieldLabel>My skills</FieldLabel>
             <TagSelect
               tags={toTags(profile.capabilities.skills)}
-              onAdd={(v) => patchCap({ skills: addTag(profile.capabilities.skills, v) })}
-              onRemove={(v) => patchCap({ skills: removeTag(profile.capabilities.skills, v) })}
+              onAdd={(v) =>
+                patchCap({
+                  skills: addCanonicalSkillTags(profile.capabilities.skills, v),
+                })
+              }
+              onRemove={(v) =>
+                patchCap({
+                  skills: removeTag(profile.capabilities.skills, v),
+                })
+              }
               placeholder="Search or add a skill (e.g. Python, React, AWS)"
               fetchSuggestions={fetchSkills}
             />
@@ -723,9 +766,17 @@ export default function ProfileContent() {
             <FieldLabel>Target roles</FieldLabel>
             <TagSelect
               tags={toTags(profile.preferences.roles)}
-              onAdd={(v) => patchPref({ roles: addTag(profile.preferences.roles, v) })}
-              onRemove={(v) => patchPref({ roles: removeTag(profile.preferences.roles, v) })}
-              placeholder="Search or add a role (e.g. Backend Engineer, Staff SWE)"
+              onAdd={(v) =>
+                patchPref({
+                  roles: addCanonicalRoleTags(profile.preferences.roles, v),
+                })
+              }
+              onRemove={(v) =>
+                patchPref({
+                  roles: removeTag(profile.preferences.roles, v),
+                })
+              }
+              placeholder="Search or add a role (e.g. Backend Engineer, Fullstack)"
               fetchSuggestions={fetchRoles}
             />
           </div>
@@ -734,8 +785,16 @@ export default function ProfileContent() {
             <FieldLabel>Tech I want to use</FieldLabel>
             <TagSelect
               tags={toTags(profile.preferences.skills)}
-              onAdd={(v) => patchPref({ skills: addTag(profile.preferences.skills, v) })}
-              onRemove={(v) => patchPref({ skills: removeTag(profile.preferences.skills, v) })}
+              onAdd={(v) =>
+                patchPref({
+                  skills: addCanonicalSkillTags(profile.preferences.skills, v),
+                })
+              }
+              onRemove={(v) =>
+                patchPref({
+                  skills: removeTag(profile.preferences.skills, v),
+                })
+              }
               placeholder="Search or add tech (e.g. Go, Kubernetes, Rust)"
               fetchSuggestions={fetchSkills}
             />
@@ -825,7 +884,12 @@ export default function ProfileContent() {
             <TagSelect
               tags={toTags(profile.rejections.soft.skills ?? [])}
               onAdd={(v) =>
-                patchRejSoft({ skills: addTag(profile.rejections.soft.skills ?? [], v) })
+                patchRejSoft({
+                  skills: addCanonicalSkillTags(
+                    profile.rejections.soft.skills ?? [],
+                    v,
+                  ),
+                })
               }
               onRemove={(v) =>
                 patchRejSoft({ skills: removeTag(profile.rejections.soft.skills ?? [], v) })

@@ -1,5 +1,9 @@
 import type { SavedSearchItem } from "@/hooks/useSavedSearches";
 import type { ExplicitProfile, ProfileSuggestion } from "@/types/profile";
+import {
+  canonicalizeSkillsForProfile,
+  profileTagKey,
+} from "@/lib/profileVocabulary";
 
 /**
  * Phase 2.1 final-minimal assist-fill.
@@ -22,18 +26,16 @@ export function getSuggestions(
 ): ProfileSuggestion[] {
   const suggestions: ProfileSuggestion[] = [];
 
-  // ── preferences.skills ← filters.stack (split + trim + case-insensitive dedupe) ──
-  // Map keyed by lowercase form preserves first-seen casing as the canonical value;
-  // prevents `React` and `react` surfacing as separate suggestions.
+  // ── preferences.skills ← filters.stack (split + trim + vocabulary 收口) ──
   const stackBag = new Map<string, string>();
   for (const s of savedSearches) {
     const stack = s.filters.stack;
     if (!stack) continue;
     for (const raw of stack.split(",")) {
-      const v = raw.trim();
-      if (!v) continue;
-      const key = v.toLowerCase();
-      if (!stackBag.has(key)) stackBag.set(key, v);
+      for (const v of canonicalizeSkillsForProfile(raw)) {
+        const key = profileTagKey(v);
+        if (!stackBag.has(key)) stackBag.set(key, v);
+      }
     }
   }
 

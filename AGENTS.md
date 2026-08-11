@@ -40,7 +40,8 @@ New client state must use versioned keys, coercion on read, and a custom `window
 - **Assist-fill ≠ implicit signals** — Profile suggestion `source: 'implicit'` marks explicit profile fields the user applied; that is different from `ImplicitSignals` in `lib/signals.ts`.
 - **Conflict priority:** `Rejections.soft` > `Preferences` > `Capabilities` (resolved at merge time for skills).
 - **Location / work mode / visa are eligibility gates only** — passing them does not imply a good fit. Soft ranking is dominated by **target roles + skills**; industry/level/size are secondary.
-- **Non-empty explicit Target roles are a hard title filter** — only `source !== "implicit"` roles gate `role_title` (`role_constraint`). Bookmark-inferred implicit roles never hard-fail. Matching normalizes `full stack` ≈ `fullstack` and `front-end` ≈ `frontend` (`lib/fitNormalize.ts`). Empty explicit roles skip the gate; skills then dominate soft ranking. Stack matching expands compounds (`React/Next.js (TypeScript)`) and aliases (`Node.js` ≈ `nodejs`). Secondary prefs (industry/size/funding) only boost when they hit — zeros do not drag the average.
+- **Non-empty explicit Target roles are a hard title filter** — only `source !== "implicit"` roles gate `role_title` (`role_constraint`). Bookmark-inferred implicit roles never hard-fail. Job-side role/stack matching uses `lib/fitNormalize.ts`. Empty explicit roles skip the gate; skills then dominate soft ranking. Secondary prefs (industry/size/funding) only boost when they hit — zeros do not drag the average.
+- **Profile vocabulary 收口** — skills/roles are canonicalized on write (`lib/profileVocabulary.ts`): compounds like `React/Next.js (TypeScript)` become atomic chips; `front-end developer` → `Frontend Engineer`. Suggestions API uses the same map. Job-side matching mess stays in `lib/fitNormalize.ts` and must not replace profile 收口.
 - **Location allow-list is geographic when the JD states geography** — remote/onsite/hybrid with a country/city must overlap `hardConstraints.locations.allow` (e.g. Singapore profile ≠ US-only remote). Macro regions expand via `lib/locationRegions.ts` (`EU` includes Germany; `EMEA` includes Europe + Middle East + Africa; `NA` includes US/Canada/Mexico). Do **not** treat “work mode includes remote” as worldwide location pass.
 - **Remote with no country/city passes location** — JD did not constrain hire-from region (UI “Location N/A”); profile allow-list must not hard-fail these.
 - **Job visa unlocks relocation, not remote geography** — onsite/hybrid with `location_visa_supported` may pass location even when the job country is outside the allow-list (US/UK + visa can fit a non-local profile). Visa does **not** bypass location for remote roles that name a country.
@@ -59,6 +60,7 @@ New client state must use versioned keys, coercion on read, and a custom `window
 | ----------------- | --------------------------------------------- |
 | Profile types     | `types/profile.ts`                            |
 | Explicit profile  | `lib/profile.ts`, `hooks/useExplicitProfile.ts` |
+| Profile vocabulary| `lib/profileVocabulary.ts`                    |
 | Signal computation| `lib/signals.ts`                              |
 | Fit engine        | `lib/fit.ts`, `lib/fitNormalize.ts`, `lib/locationRegions.ts`, `types/fit.ts` |
 | Profile UI        | `app/profile/ProfileContent.tsx`              |

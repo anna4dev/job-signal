@@ -1,5 +1,10 @@
 import { db } from "@/lib/db";
 import { NextRequest } from "next/server";
+import {
+  canonicalizeRolesForProfile,
+  canonicalizeSkillsForProfile,
+  profileTagKey,
+} from "@/lib/profileVocabulary";
 
 type SuggestionType = "skills" | "industries" | "roles" | "locations";
 
@@ -127,9 +132,12 @@ export async function GET(req: NextRequest) {
       const seen = new Set<string>();
       for (const row of [...techRes.rows, ...skillsRes.rows]) {
         const v = typeof row.val === "string" ? row.val.trim() : null;
-        if (v && !seen.has(v.toLowerCase())) {
-          seen.add(v.toLowerCase());
-          results.push(v);
+        if (!v) continue;
+        for (const label of canonicalizeSkillsForProfile(v)) {
+          const key = profileTagKey(label);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          results.push(label);
         }
       }
       results = results.slice(0, 10);
@@ -154,7 +162,17 @@ export async function GET(req: NextRequest) {
               LIMIT 20`,
         args: [pattern],
       });
-      results = normalizeRows(res.rows, 10);
+      const roleSeen = new Set<string>();
+      results = [];
+      for (const label of normalizeRows(res.rows, 20).flatMap(
+        canonicalizeRolesForProfile,
+      )) {
+        const key = profileTagKey(label);
+        if (roleSeen.has(key)) continue;
+        roleSeen.add(key);
+        results.push(label);
+        if (results.length >= 10) break;
+      }
     } else if (type === "locations") {
       // Countries from the job board — already real/normalised values from postings.
       const res = await db.execute({
