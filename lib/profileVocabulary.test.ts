@@ -274,4 +274,16 @@ describe("profileVocabulary roles", () => {
       canonicalizeRolesForProfile("Executive Assistant to the Ceo"),
     ).toEqual(["Executive Assistant"]);
   });
+
+  it("收口 agentic ops and Research: specialty titles", () => {
+    expect(
+      canonicalizeRolesForProfile("Agentic Operations Coordinator"),
+    ).toEqual(["Agentic Operator"]);
+    expect(canonicalizeRolesForProfile("Agentic Operator")).toEqual([
+      "Agentic Operator",
+    ]);
+    expect(
+      canonicalizeRolesForProfile("Research: Analytic Learning Algorithms"),
+    ).toEqual(["AI Research Engineer"]);
+  });
 });

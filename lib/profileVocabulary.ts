@@ -64,6 +64,7 @@ const ROLE_FAMILY_DISPLAY: Record<string, string> = {
   ai_research: "AI Research Engineer",
   ai_inference: "AI Inference Engineer",
   ai_agent: "AI Agent Engineer",
+  agentic_ops: "Agentic Operator",
   ai_systems: "AI Systems Engineer",
   ai_delivery: "AI Delivery",
   ai_associate: "AI Associate",
@@ -157,6 +158,11 @@ export function structuralCoreTitle(raw: string): string {
 
   // Parenthetical specialty: "Foo (bar)" → Foo
   s = s.replace(/\([^)]*\)/g, " ");
+  // "Research: Analytic Learning Algorithms" → research family via detect;
+  // also allow colon as specialty separator like comma/dash.
+  if (/^research\s*:/i.test(s)) {
+    return "Research";
+  }
   // Head before comma / em-dash / " - " specialty clause
   s = (s.split(/\s*[,–—]\s*|\s+-\s+/)[0] ?? s).trim();
   s = s.replace(/\s+/g, " ").trim();
@@ -301,7 +307,9 @@ function detectRoleFamilies(raw: string): string[] {
   if (compact.includes("bayesian")) return only("bayesian");
   if (tokens.has("llm") || compact.includes("llm")) return only("llm");
 
+  // AI research* / bare "Research" core from "Research: …" titles
   if (
+    compact === "research" ||
     compact.includes("airesearch") ||
     compact.includes("researchscientist") ||
     (compact.includes("research") &&
@@ -319,9 +327,19 @@ function detectRoleFamilies(raw: string): string[] {
 
   if (compact.includes("delivery") && hasAi) return only("ai_delivery");
 
+  // Agentic Operator / Agentic Operations Coordinator (ops, not Agent Engineer)
+  if (
+    compact.includes("agentic") &&
+    (compact.includes("operator") || compact.includes("operations"))
+  ) {
+    return only("agentic_ops");
+  }
+
   if (
     compact.includes("agentengineer") ||
-    (compact.includes("agent") && compact.includes("engineer"))
+    (compact.includes("agent") &&
+      compact.includes("engineer") &&
+      !compact.includes("agentic"))
   ) {
     return only("ai_agent");
   }
