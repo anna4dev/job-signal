@@ -21,6 +21,7 @@ describe("fitNormalize skills", () => {
       "Node.js",
       "TypeScript",
     ]);
+    expect(expandSkillLabels("Node Or Python")).toEqual(["Node", "Python"]);
   });
 
   it("normalizes node/next/react aliases", () => {
@@ -29,6 +30,17 @@ describe("fitNormalize skills", () => {
     expect(normalizeSkillKey("Next.js")).toBe("nextjs");
     expect(normalizeSkillKey("React.js")).toBe("react");
     expect(normalizeSkillKey("TypeScript")).toBe("typescript");
+    expect(normalizeSkillKey("Typescript Strict")).toBe("typescript");
+    expect(normalizeSkillKey(".NET 8")).toBe("dotnet");
+    expect(normalizeSkillKey("Asp.net Core")).toBe("dotnet");
+    expect(normalizeSkillKey("C# .NET")).toBe("dotnet");
+  });
+
+  it("matches .NET profile chip against versioned job stack labels", () => {
+    expect(skillPreferredMatchesJob(".NET", [".NET 8", "React"])).toBe(true);
+    expect(
+      skillPreferredMatchesJob(".NET", ["Asp.net Core", "TypeScript"]),
+    ).toBe(true);
   });
 
   it("matches profile React against compound job stack labels", () => {

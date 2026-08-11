@@ -24,6 +24,8 @@ const SKILL_DISPLAY: Record<string, string> = {
   react: "React",
   typescript: "TypeScript",
   javascript: "JavaScript",
+  dotnet: ".NET",
+  csharp: ".NET",
   postgresql: "PostgreSQL",
   go: "Go",
   vue: "Vue",
@@ -43,6 +45,17 @@ const SKILL_DISPLAY: Record<string, string> = {
   mongodb: "MongoDB",
   mysql: "MySQL",
   docker: "Docker",
+  django: "Django",
+  djangoq: "Django Q",
+  djangorestframework: "Django REST Framework",
+  argocd: "Argo CD",
+  agorartc: "Agora RTC",
+  azureai: "Azure AI",
+  azureopenai: "Azure OpenAI",
+  azurecontainerapps: "Azure Container Apps",
+  reactrouter: "React Router",
+  route53: "Route 53",
+  restapi: "REST API",
   aws: "AWS",
   gcp: "GCP",
   azure: "Azure",
@@ -73,6 +86,9 @@ const ROLE_FAMILY_DISPLAY: Record<string, string> = {
   category_theory: "Applied Category Theory",
   gtm: "Go-to-Market",
   bdr: "BDR",
+  business_development: "Business Development",
+  business_development_executive: "Business Development Executive",
+  business_operations: "Business Operations",
   account_executive: "Account Executive",
   mts: "Member of Technical Staff",
   dotnet: ".NET Engineer",
@@ -87,6 +103,16 @@ const ROLE_FAMILY_DISPLAY: Record<string, string> = {
   cto: "CTO",
   growth: "Growth",
   design: "Designer",
+  customer_service: "Customer Service Representative",
+  customer_success: "Customer Success",
+  customer_success_engineer: "Customer Success Engineer",
+  customer_success_manager: "Customer Success Manager",
+  customer_success_associate: "Customer Success Associate",
+  robotics: "Robotics Engineer",
+  robotics_architect: "Robotics Architect",
+  computer_vision: "Computer Vision Engineer",
+  automation_tester: "Automation Tester",
+  web_scraping: "Web Scraping Engineer",
 };
 
 const LANG_ROLE_DISPLAY: Record<string, string> = {
@@ -102,6 +128,7 @@ const LANG_ROLE_DISPLAY: Record<string, string> = {
   typescript: "TypeScript Engineer",
   javascript: "JavaScript Engineer",
   csharp: ".NET Engineer",
+  cplusplus: "C++ Engineer",
 };
 
 const SMALL_TITLE_WORDS = new Set(["of", "and", "the", "for", "to", "in", "on"]);
@@ -167,21 +194,53 @@ export function structuralCoreTitle(raw: string): string {
   s = (s.split(/\s*[,–—]\s*|\s+-\s+/)[0] ?? s).trim();
   s = s.replace(/\s+/g, " ").trim();
 
+  // "Head of X" → X (families map domain)
+  s = s.replace(/^heads?\s+of\s+/i, "");
+
+  // Seniority glued after slash: "Lead/senior", "/senior"
+  s = s.replace(
+    /\s*(leads?|leaders?|seniors?|juniors?|mid[-\s]?levels?)\s*\/\s*(leads?|leaders?|seniors?|juniors?|mid[-\s]?levels?)\s*$/i,
+    "",
+  );
+  s = s.replace(
+    /\s*\/\s*(leads?|leaders?|seniors?|juniors?|mid[-\s]?levels?)\s*$/i,
+    "",
+  );
+
   // Leading seniority / level noise (may repeat: "Senior Lead …")
   for (let i = 0; i < 3; i++) {
     const next = s.replace(
-      /^(junior|senior|staff|principal|lead|intern|experienced|expierenced|associate)\s+/i,
+      /^(junior|senior|staff|principal|lead|leader|intern|experienced|expierenced|associate|mid[-\s]?senior|mid[-\s]?level|midlevel)\s+/i,
       "",
     );
     if (next === s) break;
     s = next;
   }
 
+  // Trailing seniority / level: "… Lead", "… Mid Level", SWE II, …
+  s = s.replace(
+    /\s+(leads?|leaders?|seniors?|juniors?|mid[-\s]?levels?|midlevels?)$/i,
+    "",
+  );
+  s = s.replace(
+    /\s+(i{1,3}|iv|v|vi{0,3}|ix|x|l[1-7]|level\s*[1-7])$/i,
+    "",
+  );
+  // Trailing geo tags often stuck on sales titles
+  s = s.replace(/\s+(us|uk|eu|emea|apac)$/i, "");
+
   // Plural job nouns
   s = s.replace(
-    /\b(engineers|developers|executives|managers|scientists|researchers|associates)\b/gi,
+    /\b(engineers|developers|executives|managers|scientists|researchers|associates|testers)\b/gi,
     (_m, w: string) => w.slice(0, -1),
   );
+
+  // Common eng / domain abbreviations
+  s = s.replace(/\bswe\b/gi, "Software Engineer");
+  s = s.replace(/\bsw\s+engineers?\b/gi, "Software Engineer");
+  s = s.replace(/\bee\s+engineers?\b/gi, "Electrical Engineer");
+  s = s.replace(/\bme\s+engineers?\b/gi, "Mechanical Engineer");
+  s = s.replace(/\bcv\b/gi, "Computer Vision");
 
   // Account Exec* / Account Executive Sales → Account Executive
   s = s.replace(/\baccount\s+executives?\b/gi, "Account Executive");
@@ -197,7 +256,54 @@ export function structuralCoreTitle(raw: string): string {
   // "Software Engineering" as trailing noun → Engineer when paired with a domain
   s = s.replace(/\bsoftware\s+engineering\b/gi, "Software Engineer");
 
+  // Collapse doubled noun after SWE expand: "Software Engineer Engineer" (rare)
+  s = s.replace(/\bsoftware\s+engineer\s+engineer\b/gi, "Software Engineer");
+
+  // Automated Test* → Automation Test* for family match
+  s = s.replace(/\bautomated\s+test/gi, "Automation Test");
+
   return s.replace(/\s+/g, " ").trim();
+}
+
+const JOB_NOUN_RE =
+  /\b(engineer|developer|associate|manager|executive|representative|statistician|architect|tester|scientist|operator|coordinator|specialist)\b/i;
+
+/**
+ * Split compound titles:
+ * - shared noun: "C++/runtime Engineer", "Cv & Robotics Software Engineer"
+ * - two full roles: "Legal Operations / Legal Tech Associate"
+ * Seniority-only slash tails ("Lead/senior") are stripped in structuralCoreTitle.
+ */
+function expandCompoundRoleTitle(raw: string): string[] | null {
+  // Keep intentional brand slash chips (CTO / Co-Founder) for family detection
+  if (/\bcto\b/i.test(raw) && /\bco-?founder\b/i.test(raw)) return null;
+
+  const core = structuralCoreTitle(raw);
+  if (!core) return null;
+
+  const shared = core.match(
+    /^(.+?)\s*[\/&]\s*(.+?)\s+(software\s+engineer|engineer|developer)$/i,
+  );
+  if (shared) {
+    const left = shared[1].trim();
+    const right = shared[2].trim();
+    const noun = shared[3].trim();
+    if (!left || !right) return null;
+    return [
+      JOB_NOUN_RE.test(left) ? left : `${left} ${noun}`,
+      JOB_NOUN_RE.test(right) ? right : `${right} ${noun}`,
+    ];
+  }
+
+  if (/\s+[\/&]\s+/.test(core)) {
+    const parts = core
+      .split(/\s+[\/&]\s+/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (parts.length >= 2) return parts;
+  }
+
+  return null;
 }
 
 function languageRoleChip(core: string): string | null {
@@ -246,6 +352,34 @@ function detectRoleFamilies(raw: string): string[] {
     return only("founder_associate");
   }
 
+  // Customer Service / Success before founding* so "Founding CSM" ≠ Founding Engineer
+  const hasCustomerSuccess =
+    compact.includes("customersuccess") ||
+    (compact.includes("customer") && compact.includes("success"));
+  if (
+    compact.includes("customerservice") ||
+    (compact.includes("customer") &&
+      (compact.includes("service") ||
+        compact.includes("servicerep") ||
+        compact.includes("representative")) &&
+      !hasCustomerSuccess)
+  ) {
+    return only("customer_service");
+  }
+  if (hasCustomerSuccess) {
+    if (compact.includes("engineer")) return only("customer_success_engineer");
+    if (compact.includes("associate")) return only("customer_success_associate");
+    if (
+      compact.includes("manager") ||
+      compact.includes("lead") ||
+      compact.includes("founding") ||
+      compact.includes("technical")
+    ) {
+      return only("customer_success_manager");
+    }
+    return only("customer_success");
+  }
+
   if (
     compact.includes("foundingengineer") ||
     (compact.includes("founding") &&
@@ -276,6 +410,30 @@ function detectRoleFamilies(raw: string): string[] {
 
   if (tokens.has("bdr") || compact === "bdr" || compact.startsWith("bdr")) {
     return only("bdr");
+  }
+
+  // Business Development* (Representative → BDR; Executive kept distinct)
+  if (
+    compact.includes("businessdevelopmentrepresentative") ||
+    compact.includes("businessdeveloper") ||
+    (compact.includes("businessdevelopment") &&
+      (compact.includes("representative") ||
+        compact.endsWith("rep") ||
+        tokens.has("rep")))
+  ) {
+    return only("bdr");
+  }
+  if (
+    compact.includes("businessdevelopmentexecutive") ||
+    (compact.includes("businessdevelopment") && compact.includes("executive"))
+  ) {
+    return only("business_development_executive");
+  }
+  if (compact.includes("businessoperations")) {
+    return only("business_operations");
+  }
+  if (compact.includes("businessdevelopment")) {
+    return only("business_development");
   }
 
   // Account Executive (after structural cleanup also handles; catch raw variants here)
@@ -378,6 +536,33 @@ function detectRoleFamilies(raw: string): string[] {
 
   if (compact.includes("network")) return only("network");
 
+  if (
+    compact.includes("computervision") ||
+    (tokens.has("cv") &&
+      (compact.includes("engineer") ||
+        compact.includes("software") ||
+        compact.includes("robotic")))
+  ) {
+    return only("computer_vision");
+  }
+
+  if (compact.includes("robotic")) {
+    if (compact.includes("architect")) return only("robotics_architect");
+    return only("robotics");
+  }
+
+  if (
+    compact.includes("automationtest") ||
+    compact.includes("automatedtest") ||
+    compact.includes("automationtester")
+  ) {
+    return only("automation_tester");
+  }
+
+  if (compact.includes("webscraping")) {
+    return only("web_scraping");
+  }
+
   const has = (family: string, ...needles: string[]) => {
     if (
       needles.some(
@@ -411,6 +596,22 @@ function detectRoleFamilies(raw: string): string[] {
  * Prefers structural rules; families only when needed.
  */
 export function canonicalizeRolesForProfile(raw: string): string[] {
+  // Compound titles first so "/" / "&" actually split (families would swallow one side).
+  const compoundParts = expandCompoundRoleTitle(raw);
+  if (compoundParts) {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const part of compoundParts) {
+      for (const chip of canonicalizeRolesForProfile(part)) {
+        const key = chip.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(chip);
+      }
+    }
+    if (out.length > 0) return out;
+  }
+
   const fromRaw = detectRoleFamilies(raw);
   if (fromRaw.length > 0) {
     return fromRaw.map((f) => ROLE_FAMILY_DISPLAY[f]).filter(Boolean);
