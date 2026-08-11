@@ -9,6 +9,7 @@ export const FACTOR_FIELD_MAP = {
   visa_constraint: "location_visa_supported",
   work_mode_constraint: "work_style",
   location_constraint: "location_country",
+  role_constraint: "role_title",
   hard_rejection_industry: "industry",
   hard_rejection_company: "company_id",
   capability_skill_match: "required_skills",
