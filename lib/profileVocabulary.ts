@@ -54,7 +54,22 @@ const ROLE_FAMILY_DISPLAY: Record<string, string> = {
   data: "Data Engineer",
   ml: "ML Engineer",
   ai_swe: "AI Software Engineer",
+  ai_research: "AI Research Engineer",
+  ai_inference: "AI Inference Engineer",
+  ai_agent: "AI Agent Engineer",
+  ai_systems: "AI Systems Engineer",
+  ai_delivery: "AI Delivery",
+  ai_associate: "AI Associate",
+  llm: "LLM Engineer",
   bayesian: "Bayesian Software Engineer",
+  python_eng: "Python Engineer",
+  category_theory: "Applied Category Theory",
+  gtm: "Go-to-Market",
+  bdr: "BDR",
+  dotnet: ".NET Engineer",
+  dotnet_architect: ".NET Architect",
+  network: "Network Engineer",
+  project_manager: "Project Manager",
   product: "Product Engineer",
   founding_engineer: "Founding Engineer",
   founder_associate: "Founder's Associate",
@@ -117,6 +132,15 @@ function detectRoleFamilies(raw: string): string[] {
   const add = (family: string) => {
     if (!families.includes(family)) families.push(family);
   };
+  const only = (family: string) => {
+    add(family);
+    return families;
+  };
+  // "ai" is len 2 so it never appears in significantRoleTokens — use phrase/compact.
+  const hasAi =
+    compact.startsWith("ai") ||
+    compact.includes("ainative") ||
+    /(?:^|[^a-z])ai(?:[^a-z]|$)/.test(phrase);
 
   // Founder's / Founder / Founders Associate
   if (
@@ -124,8 +148,7 @@ function detectRoleFamilies(raw: string): string[] {
     compact.includes("foundersassociate") ||
     (compact.includes("associate") && compact.includes("founder"))
   ) {
-    add("founder_associate");
-    return families;
+    return only("founder_associate");
   }
 
   // 2nd / AI founding engineer → Founding Engineer
@@ -134,43 +157,137 @@ function detectRoleFamilies(raw: string): string[] {
     (compact.includes("founding") &&
       (compact.includes("engineer") || tokens.has("engineer")))
   ) {
-    add("founding_engineer");
-    return families;
+    return only("founding_engineer");
   }
 
   // CTO + Co-Founder (any order) vs Co-Founder alone vs CTO alone
   const hasCto = tokens.has("cto") || /(?:^|[^a-z])cto(?:[^a-z]|$)/.test(phrase);
   const hasCofounder =
     compact.includes("cofounder") || phrase.includes("co founder");
-  if (hasCto && hasCofounder) {
-    add("cto_cofounder");
-    return families;
+  if (hasCto && hasCofounder) return only("cto_cofounder");
+  if (hasCofounder) return only("cofounder");
+  if (hasCto) return only("cto");
+
+  // Applied category theory research(er)
+  if (compact.includes("categorytheory") || phrase.includes("category theory")) {
+    return only("category_theory");
   }
-  if (hasCofounder) {
-    add("cofounder");
-    return families;
+
+  // Go-to-market / GTM
+  if (
+    compact.includes("gotomarket") ||
+    compact === "gtm" ||
+    tokens.has("gtm") ||
+    phrase.includes("go to market")
+  ) {
+    return only("gtm");
   }
-  if (hasCto) {
-    add("cto");
-    return families;
+
+  // BDR
+  if (tokens.has("bdr") || compact === "bdr" || compact.startsWith("bdr")) {
+    return only("bdr");
+  }
+
+  // Project / delivery manager (IT, AI, technical, senior, tether wallet, …)
+  if (
+    compact.includes("projectmanager") ||
+    (compact.includes("delivery") && compact.includes("manager")) ||
+    (tokens.has("manager") &&
+      (compact.includes("project") || compact.includes("delivery")))
+  ) {
+    return only("project_manager");
   }
 
   // Bayesian software engineer / engineering
-  if (compact.includes("bayesian")) {
-    add("bayesian");
-    return families;
+  if (compact.includes("bayesian")) return only("bayesian");
+
+  // LLM engineer family (incl. typo inferrence → inference via normalize)
+  if (tokens.has("llm") || compact.includes("llm")) {
+    return only("llm");
   }
 
-  // AI native / AI software engineer (before generic ml)
+  // AI research* wins over inference-in-parens specialties
   if (
-    (tokens.has("ai") || compact.includes("ainative") || compact.startsWith("ai")) &&
+    compact.includes("airesearch") ||
+    compact.includes("researchscientist") ||
+    (compact.includes("research") &&
+      (compact.includes("engineer") ||
+        compact.includes("scientist") ||
+        compact.includes("researcher") ||
+        tokens.has("researcher")))
+  ) {
+    return only("ai_research");
+  }
+
+  // AI Inference Engineer (+ qvac / specialty tags)
+  if (compact.includes("inference") || phrase.includes("inference")) {
+    return only("ai_inference");
+  }
+
+  // AI Delivery Intern / Lead
+  if (compact.includes("delivery") && hasAi) {
+    return only("ai_delivery");
+  }
+
+  // AI Agent Engineer
+  if (
+    compact.includes("agentengineer") ||
+    (compact.includes("agent") && compact.includes("engineer"))
+  ) {
+    return only("ai_agent");
+  }
+
+  // AI Systems / System Engineer
+  if (
+    (compact.includes("system") || compact.includes("systems")) &&
+    hasAi
+  ) {
+    return only("ai_systems");
+  }
+
+  // AI Associate / AI Development associate
+  if (
+    compact.includes("aiassociate") ||
+    compact.includes("aidevelopmentassociate") ||
+    (hasAi && compact.includes("associate"))
+  ) {
+    return only("ai_associate");
+  }
+
+  // AI native / AI software engineer
+  if (
+    hasAi &&
     (compact.includes("software") ||
       compact.includes("ainative") ||
       phrase.includes("ai native") ||
       phrase.includes("ai software"))
   ) {
-    add("ai_swe");
-    return families;
+    return only("ai_swe");
+  }
+
+  // .NET Architect vs .NET / C# engineer
+  if (
+    compact.includes("dotnet") ||
+    tokens.has("csharp") ||
+    phrase.includes("c#") ||
+    phrase.includes(".net")
+  ) {
+    if (compact.includes("architect")) return only("dotnet_architect");
+    return only("dotnet");
+  }
+
+  // Network / Networking Engineer(s)
+  if (compact.includes("network")) {
+    return only("network");
+  }
+
+  // Python-primary engineer titles
+  if (
+    tokens.has("python") ||
+    compact.startsWith("python") ||
+    /python(?:developer|engineer|software)/.test(compact)
+  ) {
+    return only("python_eng");
   }
 
   const has = (family: string, ...needles: string[]) => {
@@ -194,11 +311,7 @@ function detectRoleFamilies(raw: string): string[] {
   has("growth", "growth");
   has("design", "design", "designer", "ux", "ui");
 
-  // Bare "ai engineer" / "ai" + eng context → ML family
-  if (
-    families.length === 0 &&
-    (tokens.has("ai") || compact.includes("aiengineer"))
-  ) {
+  if (families.length === 0 && (hasAi || compact.includes("aiengineer"))) {
     add("ml");
   }
 

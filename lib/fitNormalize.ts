@@ -116,6 +116,9 @@ const ROLE_STOPWORDS = new Set([
   "staff",
   "principal",
   "lead",
+  "intern",
+  "experienced",
+  "expierenced",
   "manager",
   "the",
   "and",
@@ -126,6 +129,15 @@ const ROLE_STOPWORDS = new Set([
   "third",
   "1st",
   "3rd",
+  "qvac",
+  "wallet",
+  "tether",
+  "kernel",
+  "optimization",
+  "compression",
+  "quantization",
+  "application",
+  "associate",
 ]);
 
 /** front-end → frontend, full-stack → fullstack, co-founder → cofounder, etc. */
@@ -137,6 +149,12 @@ export function normalizeRolePhrase(raw: string): string {
   s = s.replace(/co[\s_-]*founders?/g, "cofounder");
   s = s.replace(/founder'?s?/g, "founder");
   s = s.replace(/ai[\s_-]*native/g, "ainative");
+  s = s.replace(/go[\s_-]*to[\s_-]*market/g, "gotomarket");
+  s = s.replace(/\binferrence\b/g, "inference");
+  s = s.replace(/\bnetworking\b/g, "network");
+  s = s.replace(/multi[\s_-]*modal/g, "multimodal");
+  s = s.replace(/c\s*#/g, "csharp");
+  s = s.replace(/\.?\s*net\b/g, "dotnet");
   return s;
 }
 
