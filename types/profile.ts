@@ -70,6 +70,7 @@ export interface Capabilities {
 // RULE: Per-dimension sum(weight)=1 is enforced at write time in UnifiedSignals.
 // Preferences.skills.weight = desire-to-use (≠ Capabilities.skills.weight = proficiency).
 export interface Preferences {
+  // Non-empty → fit() hard-fails titles that match none (role_constraint).
   roles: Weighted<ID>[]; // weight = intent strength
   skills: Weighted<ID>[]; // weight = desire to use this technology
   industries: Weighted<ID>[];
