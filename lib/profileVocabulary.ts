@@ -53,7 +53,14 @@ const ROLE_FAMILY_DISPLAY: Record<string, string> = {
   devops: "DevOps Engineer",
   data: "Data Engineer",
   ml: "ML Engineer",
+  ai_swe: "AI Software Engineer",
+  bayesian: "Bayesian Software Engineer",
   product: "Product Engineer",
+  founding_engineer: "Founding Engineer",
+  founder_associate: "Founder's Associate",
+  cto_cofounder: "CTO / Co-Founder",
+  cofounder: "Co-Founder",
+  cto: "CTO",
   growth: "Growth",
   design: "Designer",
 };
@@ -97,17 +104,82 @@ export function canonicalizeSkillsForProfile(raw: string): string[] {
   return out;
 }
 
+/**
+ * Ordered, specific-first family detection. More specific titles must win over
+ * generic "ai" → ML or bare "engineer" fallbacks.
+ */
 function detectRoleFamilies(raw: string): string[] {
   const phrase = normalizeRolePhrase(raw);
   const compact = phrase.replace(/[^a-z0-9]+/g, "");
   const tokens = new Set(significantRoleTokens(raw));
   const families: string[] = [];
 
+  const add = (family: string) => {
+    if (!families.includes(family)) families.push(family);
+  };
+
+  // Founder's / Founder / Founders Associate
+  if (
+    compact.includes("founderassociate") ||
+    compact.includes("foundersassociate") ||
+    (compact.includes("associate") && compact.includes("founder"))
+  ) {
+    add("founder_associate");
+    return families;
+  }
+
+  // 2nd / AI founding engineer → Founding Engineer
+  if (
+    compact.includes("foundingengineer") ||
+    (compact.includes("founding") &&
+      (compact.includes("engineer") || tokens.has("engineer")))
+  ) {
+    add("founding_engineer");
+    return families;
+  }
+
+  // CTO + Co-Founder (any order) vs Co-Founder alone vs CTO alone
+  const hasCto = tokens.has("cto") || /(?:^|[^a-z])cto(?:[^a-z]|$)/.test(phrase);
+  const hasCofounder =
+    compact.includes("cofounder") || phrase.includes("co founder");
+  if (hasCto && hasCofounder) {
+    add("cto_cofounder");
+    return families;
+  }
+  if (hasCofounder) {
+    add("cofounder");
+    return families;
+  }
+  if (hasCto) {
+    add("cto");
+    return families;
+  }
+
+  // Bayesian software engineer / engineering
+  if (compact.includes("bayesian")) {
+    add("bayesian");
+    return families;
+  }
+
+  // AI native / AI software engineer (before generic ml)
+  if (
+    (tokens.has("ai") || compact.includes("ainative") || compact.startsWith("ai")) &&
+    (compact.includes("software") ||
+      compact.includes("ainative") ||
+      phrase.includes("ai native") ||
+      phrase.includes("ai software"))
+  ) {
+    add("ai_swe");
+    return families;
+  }
+
   const has = (family: string, ...needles: string[]) => {
     if (
-      needles.some((n) => compact.includes(n) || tokens.has(n) || phrase.includes(n))
+      needles.some(
+        (n) => compact.includes(n) || tokens.has(n) || phrase.includes(n),
+      )
     ) {
-      families.push(family);
+      add(family);
     }
   };
 
@@ -122,15 +194,15 @@ function detectRoleFamilies(raw: string): string[] {
   has("growth", "growth");
   has("design", "design", "designer", "ux", "ui");
 
-  // "ai engineer" without ml/product → treat as ml family if "ai" alone with engineer context
+  // Bare "ai engineer" / "ai" + eng context → ML family
   if (
     families.length === 0 &&
     (tokens.has("ai") || compact.includes("aiengineer"))
   ) {
-    families.push("ml");
+    add("ml");
   }
 
-  return [...new Set(families)];
+  return families;
 }
 
 /**

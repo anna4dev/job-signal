@@ -36,4 +36,48 @@ describe("profileVocabulary roles", () => {
       canonicalizeRolesForProfile("ai product engineer (fullstack)"),
     ).toEqual(["Fullstack Engineer", "Product Engineer"]);
   });
+
+  it("收口 founder associate spellings", () => {
+    for (const raw of [
+      "Founder's Associate",
+      "Founder Associate",
+      "Founders Associate",
+    ]) {
+      expect(canonicalizeRolesForProfile(raw)).toEqual(["Founder's Associate"]);
+    }
+  });
+
+  it("收口 co-founder / CTO combinations", () => {
+    expect(canonicalizeRolesForProfile("cto co-founder")).toEqual([
+      "CTO / Co-Founder",
+    ]);
+    expect(canonicalizeRolesForProfile("co-founder cto")).toEqual([
+      "CTO / Co-Founder",
+    ]);
+    expect(canonicalizeRolesForProfile("co-founder")).toEqual(["Co-Founder"]);
+  });
+
+  it("收口 founding engineer variants", () => {
+    expect(canonicalizeRolesForProfile("2nd founding engineer")).toEqual([
+      "Founding Engineer",
+    ]);
+    expect(canonicalizeRolesForProfile("ai founding engineer")).toEqual([
+      "Founding Engineer",
+    ]);
+  });
+
+  it("收口 AI / Bayesian software engineer labels", () => {
+    expect(canonicalizeRolesForProfile("AI native software engineer")).toEqual([
+      "AI Software Engineer",
+    ]);
+    expect(canonicalizeRolesForProfile("ai software engineer")).toEqual([
+      "AI Software Engineer",
+    ]);
+    expect(canonicalizeRolesForProfile("Bayesian software engineer")).toEqual([
+      "Bayesian Software Engineer",
+    ]);
+    expect(
+      canonicalizeRolesForProfile("Bayesian software engineering"),
+    ).toEqual(["Bayesian Software Engineer"]);
+  });
 });

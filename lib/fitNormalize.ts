@@ -120,14 +120,23 @@ const ROLE_STOPWORDS = new Set([
   "the",
   "and",
   "or",
+  "native",
+  "2nd",
+  "second",
+  "third",
+  "1st",
+  "3rd",
 ]);
 
-/** front-end → frontend, full-stack → fullstack, etc. */
+/** front-end → frontend, full-stack → fullstack, co-founder → cofounder, etc. */
 export function normalizeRolePhrase(raw: string): string {
   let s = lower(raw);
   s = s.replace(/front[\s_-]*end/g, "frontend");
   s = s.replace(/back[\s_-]*end/g, "backend");
   s = s.replace(/full[\s_-]*stack/g, "fullstack");
+  s = s.replace(/co[\s_-]*founders?/g, "cofounder");
+  s = s.replace(/founder'?s?/g, "founder");
+  s = s.replace(/ai[\s_-]*native/g, "ainative");
   return s;
 }
 

@@ -65,4 +65,18 @@ describe("fitNormalize roles", () => {
       roleTitleMatches("Backend Engineer", "frontend developer"),
     ).toBe(false);
   });
+
+  it("matches founding / co-founder title variants", () => {
+    expect(
+      roleTitleMatches("AI Founding Engineer", "Founding Engineer"),
+    ).toBe(true);
+    expect(
+      roleTitleMatches("2nd Founding Engineer", "Founding Engineer"),
+    ).toBe(true);
+    expect(roleTitleMatches("CTO Co-Founder", "CTO / Co-Founder")).toBe(true);
+    expect(roleTitleMatches("Co-Founder", "Co-Founder")).toBe(true);
+    expect(
+      roleTitleMatches("Founders Associate", "Founder's Associate"),
+    ).toBe(true);
+  });
 });
