@@ -35,6 +35,19 @@ const ONCALL_RE = /\bon[\s-]?call\b/i;
 /** Soft-rejection penalty scale (keeps penalties from zeroing a strong match alone). */
 const SOFT_PENALTY_SCALE = 0.35;
 
+/**
+ * Soft-factor relative weights. Location / work mode / visa are hard gates only.
+ * Role + skills dominate ranking; industry/level/size are secondary.
+ */
+const W_ROLE = 3;
+const W_SKILL_PREF = 2.5;
+const W_SKILL_CAP = 2.5;
+const W_LEVEL = 0.4;
+const W_INDUSTRY = 0.5;
+const W_SIZE = 0.3;
+const W_FUNDING = 0.3;
+const W_WORK_MODE_PREF = 0.4;
+
 /** Min length before fuzzy substring matching is allowed (exact match always OK). */
 const MIN_FUZZY_LEN = 3;
 
@@ -314,6 +327,7 @@ function reasonTagFor(key: FactorKey, hardFail: boolean): string {
     visa_constraint: hardFail ? "Visa requirement unmet" : "Visa OK",
     work_mode_constraint: hardFail ? "Work mode mismatch" : "Work mode OK",
     location_constraint: hardFail ? "Location mismatch" : "Location OK",
+    role_constraint: hardFail ? "Role mismatch" : "Role OK",
     hard_rejection_industry: "Blocked industry",
     hard_rejection_company: "Blocked company",
     capability_skill_match: "Skill fit",
@@ -400,6 +414,23 @@ function evaluateHardConstraints(
     if (!ok) failed.push("location_constraint");
   }
 
+  // Target roles (preferences): when set, act as a hard title allow-list.
+  // Location/work mode only gate eligibility; role+skills decide fit quality.
+  if (signals.preferences.roles.length > 0) {
+    const roleScore = roleMatchScore(signals.preferences.roles, job.role_title);
+    const ok = roleScore != null && roleScore > 0;
+    breakdown.push({
+      key: "role_constraint",
+      score: ok ? 1 : 0,
+      weight: 1,
+      contribution: 0,
+      detail: ok
+        ? `role matched (${job.role_title})`
+        : `role not in target list (${job.role_title})`,
+    });
+    if (!ok) failed.push("role_constraint");
+  }
+
   // Hard industry rejection
   if (hard.industries?.length && job.industry) {
     const industry = canonical(job.industry);
@@ -453,14 +484,15 @@ function evaluateSoftFactors(
       : job.tech_stack;
 
   // Preferences (pre-normalized — do NOT call normalizeWeights)
+  // Role hard-gate is in evaluateHardConstraints; soft role score ranks matches.
   const role = roleMatchScore(pref.roles, job.role_title);
-  if (role != null) {
-    pushFactor(out, "preference_role_match", role, 1, job.role_title);
+  if (role != null && role > 0) {
+    pushFactor(out, "preference_role_match", role, W_ROLE, job.role_title);
   }
 
   const skillPref = preferenceCoverage(pref.skills, job.tech_stack);
   if (skillPref != null) {
-    pushFactor(out, "preference_skill_match", skillPref, 1);
+    pushFactor(out, "preference_skill_match", skillPref, W_SKILL_PREF);
   }
 
   const industry = preferenceCoverage(
@@ -468,12 +500,12 @@ function evaluateSoftFactors(
     job.industry ? [job.industry] : [],
   );
   if (industry != null) {
-    pushFactor(out, "preference_industry_match", industry, 1, job.industry ?? undefined);
+    pushFactor(out, "preference_industry_match", industry, W_INDUSTRY, job.industry ?? undefined);
   }
 
   const size = preferenceCoverage(pref.companySizes, job.size ? [job.size] : []);
   if (size != null) {
-    pushFactor(out, "preference_company_size_match", size, 1, job.size ?? undefined);
+    pushFactor(out, "preference_company_size_match", size, W_SIZE, job.size ?? undefined);
   }
 
   const funding = preferenceCoverage(
@@ -485,7 +517,7 @@ function evaluateSoftFactors(
       out,
       "preference_funding_stage_match",
       funding,
-      1,
+      W_FUNDING,
       job.funding_stage ?? undefined,
     );
   }
@@ -495,7 +527,7 @@ function evaluateSoftFactors(
     const score = modeHit ? Math.min(1, modeHit.weight) : 0;
     // Prefer absolute match quality: if workMode is normalized, weight of matched mode is the score.
     // If multiple modes, sum of matching weights (at most one mode matches).
-    pushFactor(out, "preference_work_mode_match", score, 1, jobMode);
+    pushFactor(out, "preference_work_mode_match", score, W_WORK_MODE_PREF, jobMode);
   }
 
   if (pref.salary) {
@@ -507,14 +539,14 @@ function evaluateSoftFactors(
   // Capabilities
   const capSkills = capabilitySkillScore(cap.skills, jobSkills);
   if (capSkills != null) {
-    pushFactor(out, "capability_skill_match", capSkills, 1);
+    pushFactor(out, "capability_skill_match", capSkills, W_SKILL_CAP);
   }
 
   pushFactor(
     out,
     "capability_level_match",
     levelMatchScore(cap.seniorityLevel, job.level),
-    1,
+    W_LEVEL,
     `${cap.seniorityLevel}→${job.level}`,
   );
 
