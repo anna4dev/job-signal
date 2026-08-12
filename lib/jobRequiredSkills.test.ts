@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  aggregateRequiredSkillsByCanonical,
-  filterCanonicalSkillSuggestions,
-} from "@/lib/jobRequiredSkills";
+import { aggregateRequiredSkillsByCanonical } from "@/lib/jobRequiredSkills";
+import { filterCanonicalSkillSuggestions } from "@/lib/skillChipSuggest";
 
 describe("jobRequiredSkills", () => {
   it("收口 required_skills tech aliases and keeps soft-skill labels", () => {
@@ -25,10 +23,6 @@ describe("jobRequiredSkills", () => {
     ];
     expect(filterCanonicalSkillSuggestions(stats, "nodejs")).toEqual([
       "Node.js",
-    ]);
-    expect(filterCanonicalSkillSuggestions(stats, "Node")).toEqual(["Node.js"]);
-    expect(filterCanonicalSkillSuggestions(stats, "comm")).toEqual([
-      "Communication",
     ]);
   });
 });

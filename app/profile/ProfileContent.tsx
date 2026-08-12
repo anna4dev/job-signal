@@ -39,7 +39,7 @@ import {
   profileTagKey,
 } from "@/lib/profileVocabulary";
 import { loadJobStackNames } from "@/lib/jobStackClient";
-import { normalizeSkillKey } from "@/lib/fitNormalize";
+import { filterCanonicalSkillNames } from "@/lib/skillChipSuggest";
 
 // ── Stable fetch helpers (module-level = stable reference, safe in useEffect deps) ──
 
@@ -61,19 +61,7 @@ const fetchLocations = makeProfileFetch("locations");
 /** Tech want / don't ← shared /api/jobs/stack loader (same as homepage filter). */
 async function fetchTechStack(q: string): Promise<string[]> {
   const names = await loadJobStackNames();
-  const needle = q.trim().toLowerCase();
-  if (!needle) return [];
-  const queryKeys = new Set(
-    [normalizeSkillKey(q), ...canonicalizeSkillsForProfile(q).map(normalizeSkillKey)].filter(
-      Boolean,
-    ),
-  );
-  return names
-    .filter((n) => {
-      if (n.toLowerCase().includes(needle)) return true;
-      return queryKeys.has(normalizeSkillKey(n));
-    })
-    .slice(0, 10);
+  return filterCanonicalSkillNames(names, q, 10);
 }
 
 // Whitelist for runtime validation of WorkMode values from suggestions / external sources.
