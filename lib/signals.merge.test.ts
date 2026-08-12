@@ -20,13 +20,18 @@ describe("mergePreferences skills", () => {
       prefs([
         { value: "Node.js", weight: 0.4, source: "explicit" },
         { value: "nodejs", weight: 0.3, source: "explicit" },
+        { value: "Python", weight: 0.3, source: "explicit" },
       ]),
       {},
       emptyRejections,
     );
-    expect(merged.skills).toHaveLength(1);
-    expect(merged.skills[0].value).toBe("Node.js");
-    // weights accumulate then normalize to 1 for a single skill
-    expect(merged.skills[0].weight).toBe(1);
+    expect(merged.skills).toHaveLength(2);
+    const node = merged.skills.find((s) => s.value === "Node.js");
+    const python = merged.skills.find((s) => s.value === "Python");
+    expect(node).toBeDefined();
+    expect(python).toBeDefined();
+    // 0.4 + 0.3 = 0.7 vs Python 0.3 → 0.7 : 0.3 after normalize
+    expect(node!.weight).toBeCloseTo(0.7, 5);
+    expect(python!.weight).toBeCloseTo(0.3, 5);
   });
 });
