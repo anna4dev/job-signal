@@ -100,4 +100,18 @@ describe("fitNormalize roles", () => {
       roleTitleMatches("Founders Associate", "Founder's Associate"),
     ).toBe(true);
   });
+
+  it("matches ML / DevOps write-side chips against JD title variants", () => {
+    expect(
+      roleTitleMatches("Machine Learning Engineer", "ML Engineer"),
+    ).toBe(true);
+    expect(roleTitleMatches("ML Engineer", "ML Engineer")).toBe(true);
+    expect(roleTitleMatches("Senior SRE", "DevOps Engineer")).toBe(true);
+    expect(
+      roleTitleMatches("Site Reliability Engineer", "DevOps Engineer"),
+    ).toBe(true);
+    expect(
+      roleTitleMatches("Platform Engineer", "DevOps Engineer"),
+    ).toBe(true);
+  });
 });

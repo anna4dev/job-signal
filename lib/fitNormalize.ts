@@ -290,6 +290,13 @@ export function normalizeRolePhrase(raw: string): string {
   s = s.replace(/\binferrence\b/g, "inference");
   s = s.replace(/\bnetworking\b/g, "network");
   s = s.replace(/multi[\s_-]*modal/g, "multimodal");
+  // Write-side chips ↔ JD titles: ML Engineer ≡ Machine Learning Engineer
+  s = s.replace(/machine[\s_-]*learning/g, "ml");
+  s = s.replace(/deep[\s_-]*learning/g, "ml");
+  // DevOps Engineer chip ≡ SRE / Site Reliability / Platform Engineer
+  s = s.replace(/site[\s_-]*reliability(\s+engineers?)?/g, "devops");
+  s = s.replace(/\bsre\b/g, "devops");
+  s = s.replace(/\bplatform\s+(engineers?|developers?)\b/g, "devops $1");
   s = s.replace(/c\s*#/g, "csharp");
   s = s.replace(/c\+\+/g, "cplusplus");
   s = s.replace(/\bcpp\b/g, "cplusplus");
@@ -306,12 +313,19 @@ export function compactRoleKey(raw: string): string {
   return normalizeRolePhrase(raw).replace(/[^a-z0-9]+/g, "");
 }
 
+/** Short brands kept as tokens so chip "ML Engineer" matches JD "Machine Learning Engineer". */
+const SHORT_ROLE_KEEP = new Set(["ml", "ai", "ui", "ux", "qa", "pm"]);
+
 export function significantRoleTokens(raw: string): string[] {
   const phrase = normalizeRolePhrase(raw);
   return phrase
     .split(/[^a-z0-9]+/)
     .map((t) => t.trim())
-    .filter((t) => t.length >= MIN_TOKEN_LEN && !ROLE_STOPWORDS.has(t));
+    .filter(
+      (t) =>
+        (t.length >= MIN_TOKEN_LEN || SHORT_ROLE_KEEP.has(t)) &&
+        !ROLE_STOPWORDS.has(t),
+    );
 }
 
 /**
