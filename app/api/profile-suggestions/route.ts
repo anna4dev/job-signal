@@ -1,6 +1,9 @@
 import { db } from "@/lib/db";
 import { NextRequest } from "next/server";
 import { JOB_STACK_VOCAB_VERSION } from "@/lib/jobTechStack";
+import {
+  filterCanonicalSkillSuggestions,
+} from "@/lib/jobRequiredSkills";
 import { getCanonicalRequiredSkillStats } from "@/lib/jobRequiredSkillsCache";
 import {
   canonicalizeRolesForProfile,
@@ -106,11 +109,7 @@ export async function GET(req: NextRequest) {
       // Profile "My skills" ← jobs_structured.required_skills (canonical chips).
       // Tech want/don't use /api/jobs/stack (job tech_stack), not this type.
       const stats = await getCanonicalRequiredSkillStats();
-      const needle = q.toLowerCase();
-      results = stats
-        .filter((s) => s.name.toLowerCase().includes(needle))
-        .slice(0, 10)
-        .map((s) => s.name);
+      results = filterCanonicalSkillSuggestions(stats, q, 10);
     } else {
       // Escape SQL LIKE wildcards before composing the pattern. `q` is parameterized
       // so SQL injection is impossible, but raw `%` / `_` are still treated as

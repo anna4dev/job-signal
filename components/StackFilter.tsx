@@ -2,11 +2,10 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-
-interface StackOption {
-  name: string;
-  count: number;
-}
+import {
+  loadJobStackOptions,
+  type StackOption,
+} from "@/lib/jobStackClient";
 
 export default function StackFilter({
   value,
@@ -26,11 +25,8 @@ export default function StackFilter({
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch("/api/jobs/stack", { cache: "no-store" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) setOptions(data);
-      })
+    loadJobStackOptions()
+      .then(setOptions)
       .catch((err) => console.error("Fetch stacks failed", err));
   }, []);
 

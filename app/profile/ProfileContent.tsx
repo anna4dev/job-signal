@@ -38,6 +38,8 @@ import {
   canonicalizeSkillsForProfile,
   profileTagKey,
 } from "@/lib/profileVocabulary";
+import { loadJobStackNames } from "@/lib/jobStackClient";
+import { normalizeSkillKey } from "@/lib/fitNormalize";
 
 // ── Stable fetch helpers (module-level = stable reference, safe in useEffect deps) ──
 
@@ -56,46 +58,21 @@ const fetchIndustries = makeProfileFetch("industries");
 const fetchRoles = makeProfileFetch("roles");
 const fetchLocations = makeProfileFetch("locations");
 
-/**
- * Tech want / don't ← same canonical list as homepage StackFilter (/api/jobs/stack).
- * Load once, filter client-side (list is hundreds of chips, not thousands).
- */
-let jobStackNamesCache: string[] | null = null;
-let jobStackNamesInflight: Promise<string[]> | null = null;
-
-function loadJobStackNames(): Promise<string[]> {
-  if (jobStackNamesCache) return Promise.resolve(jobStackNamesCache);
-  if (jobStackNamesInflight) return jobStackNamesInflight;
-  jobStackNamesInflight = fetch("/api/jobs/stack", { cache: "no-store" })
-    .then((r) => r.json())
-    .then((data: unknown) => {
-      const names = Array.isArray(data)
-        ? data
-            .map((row) =>
-              row &&
-              typeof row === "object" &&
-              typeof (row as { name?: unknown }).name === "string"
-                ? (row as { name: string }).name
-                : "",
-            )
-            .filter(Boolean)
-        : [];
-      jobStackNamesCache = names;
-      return names;
-    })
-    .catch(() => [])
-    .finally(() => {
-      jobStackNamesInflight = null;
-    });
-  return jobStackNamesInflight;
-}
-
+/** Tech want / don't ← shared /api/jobs/stack loader (same as homepage filter). */
 async function fetchTechStack(q: string): Promise<string[]> {
   const names = await loadJobStackNames();
   const needle = q.trim().toLowerCase();
   if (!needle) return [];
+  const queryKeys = new Set(
+    [normalizeSkillKey(q), ...canonicalizeSkillsForProfile(q).map(normalizeSkillKey)].filter(
+      Boolean,
+    ),
+  );
   return names
-    .filter((n) => n.toLowerCase().includes(needle))
+    .filter((n) => {
+      if (n.toLowerCase().includes(needle)) return true;
+      return queryKeys.has(normalizeSkillKey(n));
+    })
     .slice(0, 10);
 }
 
