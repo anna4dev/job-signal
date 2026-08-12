@@ -244,6 +244,15 @@ describe("profileVocabulary roles", () => {
     ]);
   });
 
+  it("maps iOS to mobile without matching BIOS", () => {
+    expect(canonicalizeRolesForProfile("iOS Engineer")).toEqual([
+      "Mobile Engineer",
+    ]);
+    expect(canonicalizeRolesForProfile("BIOS Engineer")).not.toEqual([
+      "Mobile Engineer",
+    ]);
+  });
+
   it("收口 GTM, BDR, category theory, .NET, network, PM", () => {
     expect(canonicalizeRolesForProfile("Applied category theory research")).toEqual([
       "Applied Category Theory",

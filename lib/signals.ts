@@ -147,11 +147,20 @@ export function mergePreferences(
     rejectedIds: Set<string>,
     keyOf: (v: string) => string = canonicalId,
   ): Weighted<ID>[] {
-    // Step 1: groupBy(key) — use canonical key, preserve first-seen value
+    // Step 1: groupBy(key) — preserve first-seen value; accumulate duplicate weights
     const map = new Map<string, Weighted<ID>>();
 
     for (const item of explicitList) {
-      map.set(keyOf(item.value), { ...item, source: "explicit" });
+      const key = keyOf(item.value);
+      const existing = map.get(key);
+      if (existing) {
+        map.set(key, {
+          ...existing,
+          weight: Math.min(1, existing.weight + item.weight),
+        });
+      } else {
+        map.set(key, { ...item, source: "explicit" });
+      }
     }
 
     for (const item of implicitList ?? []) {

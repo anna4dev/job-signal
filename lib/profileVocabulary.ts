@@ -599,7 +599,9 @@ function detectRoleFamilies(raw: string): string[] {
   hasCompact("frontend", "frontend");
   hasCompact("backend", "backend");
   hasCompact("fullstack", "fullstack");
-  hasCompact("mobile", "mobile", "ios", "android");
+  hasCompact("mobile", "mobile");
+  // ios/android as tokens only — compact "ios" false-positives BIOS Engineer
+  hasToken("mobile", "ios", "android");
   hasCompact("devops", "devops", "sre", "platform");
   hasToken("data", "data");
   hasCompact("ml", "machinelearning", "deeplearning");
