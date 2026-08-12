@@ -146,6 +146,10 @@ export function normalizeSkillKey(raw: string): string {
   const dotnetKey = dotnetFamilyKey(s);
   if (dotnetKey) return dotnetKey;
 
+  // Route 53 before version strip — otherwise "Route 53" → "route" ≠ route53.
+  const route53Early = route53FamilyKey(s);
+  if (route53Early) return route53Early;
+
   // Strip trailing version-ish noise: "django 4.1.13", "react router v7"
   s = s.replace(/\bv?\d+(\.\d+)*\b/g, " ").replace(/\s+/g, " ").trim();
 
@@ -158,7 +162,6 @@ export function normalizeSkillKey(raw: string): string {
     argoFamilyKey,
     azureFamilyKey,
     reactRouterFamilyKey,
-    route53FamilyKey,
     pythonFamilyKey,
   ]) {
     const key = family(s);
@@ -290,7 +293,8 @@ export function normalizeRolePhrase(raw: string): string {
   s = s.replace(/c\s*#/g, "csharp");
   s = s.replace(/c\+\+/g, "cplusplus");
   s = s.replace(/\bcpp\b/g, "cplusplus");
-  s = s.replace(/\.?\s*net\b/g, "dotnet");
+  // Bound .NET rewrite: do not turn "Internet" into "interdotnet".
+  s = s.replace(/(?<![a-z])\.?net(?![a-z])/g, "dotnet");
   s = s.replace(/\bswe\b/g, "software engineer");
   s = s.replace(/\bsw\s+engineers?\b/g, "software engineer");
   s = s.replace(/\bee\s+engineers?\b/g, "electrical engineer");

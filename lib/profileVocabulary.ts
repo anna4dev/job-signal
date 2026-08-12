@@ -131,6 +131,23 @@ const LANG_ROLE_DISPLAY: Record<string, string> = {
   cplusplus: "C++ Engineer",
 };
 
+/** Longer / more specific language keys first (javascript before java; python before typescript for mixed titles). */
+const LANG_ROLE_MATCH_ORDER = [
+  "javascript",
+  "python",
+  "typescript",
+  "cplusplus",
+  "csharp",
+  "kotlin",
+  "scala",
+  "swift",
+  "ruby",
+  "rust",
+  "java",
+  "php",
+  "go",
+] as const;
+
 const SMALL_TITLE_WORDS = new Set(["of", "and", "the", "for", "to", "in", "on"]);
 
 function titleCaseWords(s: string): string {
@@ -311,7 +328,9 @@ function languageRoleChip(core: string): string | null {
   const compact = phrase.replace(/[^a-z0-9]+/g, "");
   if (!/(developer|engineer|distributed)/.test(compact)) return null;
 
-  for (const [lang, label] of Object.entries(LANG_ROLE_DISPLAY)) {
+  for (const lang of LANG_ROLE_MATCH_ORDER) {
+    const label = LANG_ROLE_DISPLAY[lang];
+    if (!label) continue;
     if (lang === "go") {
       if (/(?:^|[^a-z])go(?:[^a-z]|$)/.test(phrase) || compact.startsWith("go")) {
         return label;
@@ -563,7 +582,11 @@ function detectRoleFamilies(raw: string): string[] {
     return only("web_scraping");
   }
 
-  const has = (family: string, ...needles: string[]) => {
+  const hasToken = (family: string, ...needles: string[]) => {
+    if (needles.some((n) => tokens.has(n))) add(family);
+  };
+  // Safe compact needles: not a prefix of a longer English word (e.g. data⊂database).
+  const hasCompact = (family: string, ...needles: string[]) => {
     if (
       needles.some(
         (n) => compact.includes(n) || tokens.has(n) || phrase.includes(n),
@@ -573,16 +596,28 @@ function detectRoleFamilies(raw: string): string[] {
     }
   };
 
-  has("frontend", "frontend");
-  has("backend", "backend");
-  has("fullstack", "fullstack");
-  has("mobile", "mobile", "ios", "android");
-  has("devops", "devops", "sre", "platform");
-  has("data", "data");
-  has("ml", "ml", "machinelearning", "deeplearning");
-  has("product", "product");
-  has("growth", "growth");
-  has("design", "design", "designer", "ux", "ui");
+  hasCompact("frontend", "frontend");
+  hasCompact("backend", "backend");
+  hasCompact("fullstack", "fullstack");
+  hasCompact("mobile", "mobile", "ios", "android");
+  hasCompact("devops", "devops", "sre", "platform");
+  hasToken("data", "data");
+  hasCompact("ml", "machinelearning", "deeplearning");
+  hasToken("ml", "ml");
+  hasToken("product", "product");
+  hasToken("growth", "growth");
+  hasToken("design", "designer", "ux", "ui");
+  // Bare "design" — skip Design Systems* titles
+  if (
+    tokens.has("design") &&
+    !tokens.has("systems") &&
+    !tokens.has("system") &&
+    (tokens.has("engineer") ||
+      tokens.has("developer") ||
+      tokens.size <= 2)
+  ) {
+    add("design");
+  }
 
   if (families.length === 0 && (hasAi || compact.includes("aiengineer"))) {
     add("ml");

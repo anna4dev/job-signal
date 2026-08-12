@@ -43,6 +43,15 @@ describe("fitNormalize skills", () => {
     ).toBe(true);
   });
 
+  it("keeps Route 53 and Route53 as the same key after version strip", () => {
+    expect(normalizeSkillKey("Route 53")).toBe("route53");
+    expect(normalizeSkillKey("Route53")).toBe("route53");
+  });
+
+  it("does not rewrite Internet as .NET", () => {
+    expect(normalizeSkillKey("Internet")).not.toBe("dotnet");
+  });
+
   it("matches profile React against compound job stack labels", () => {
     expect(
       skillPreferredMatchesJob("React", [

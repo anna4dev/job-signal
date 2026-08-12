@@ -226,6 +226,24 @@ describe("profileVocabulary roles", () => {
     }
   });
 
+  it("收口 Javascript before Java; Internet is not .NET", () => {
+    expect(canonicalizeRolesForProfile("Javascript Developer")).toEqual([
+      "JavaScript Engineer",
+    ]);
+    expect(canonicalizeRolesForProfile("Internet Engineer")).not.toEqual([
+      ".NET Engineer",
+    ]);
+  });
+
+  it("does not map Database / Design Systems titles via data/design substrings", () => {
+    expect(canonicalizeRolesForProfile("Database Engineer")).not.toEqual([
+      "Data Engineer",
+    ]);
+    expect(canonicalizeRolesForProfile("Design Systems Manager")).not.toEqual([
+      "Designer",
+    ]);
+  });
+
   it("收口 GTM, BDR, category theory, .NET, network, PM", () => {
     expect(canonicalizeRolesForProfile("Applied category theory research")).toEqual([
       "Applied Category Theory",

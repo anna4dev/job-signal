@@ -540,6 +540,75 @@ describe("fit()", () => {
     expect(result.reasonTags).toContain("Role mismatch");
   });
 
+  it("role hard-gate ignores zero weight when title matches", () => {
+    const result = fit(
+      baseJob({
+        role_title: "Product Engineer",
+        location_remote: 1,
+        location_country: null,
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["remote"] },
+          locations: { allow: [] },
+          employmentTypes: [],
+        },
+        preferences: {
+          roles: [
+            { value: "Product Engineer", weight: 0, source: "explicit" },
+          ],
+          skills: [],
+          industries: [],
+          companySizes: [],
+          fundingStages: [],
+        },
+      }),
+    );
+    expect(result.hardFailReasons).not.toContain("role_constraint");
+    expect(result.hardFail).toBe(false);
+  });
+
+  it("soft-rejected skills do not also emit positive skill factors", () => {
+    const result = fit(
+      baseJob({
+        location_remote: 1,
+        location_country: null,
+        tech_stack: ["PHP", "React"],
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["remote"] },
+          locations: { allow: [] },
+          employmentTypes: [],
+        },
+        preferences: {
+          roles: [],
+          skills: [{ value: "PHP", weight: 1, source: "explicit" }],
+          industries: [],
+          companySizes: [],
+          fundingStages: [],
+        },
+        capabilities: {
+          skills: [{ value: "PHP", weight: 1, source: "explicit" }],
+          yearsOfExperience: 5,
+          seniorityLevel: "senior",
+        },
+        rejections: {
+          soft: {
+            skills: [{ value: "PHP", weight: 1, source: "explicit" }],
+          },
+          hard: {},
+        },
+      }),
+    );
+    const keys = result.factorBreakdown.map((f) => f.key);
+    expect(keys).toContain("soft_rejection_skill");
+    expect(keys).not.toContain("preference_skill_match");
+    expect(keys).not.toContain("capability_skill_match");
+  });
+
   it("does not hard-fail on implicit-only roles when explicit Target roles are empty", () => {
     const result = fit(
       baseJob({

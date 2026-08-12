@@ -16,6 +16,7 @@ import { parseTechStackField } from "@/lib/parseJobFields";
 import { canonCountry, countryInAllowRegion } from "@/lib/locationRegions";
 import {
   roleTitleMatches,
+  skillLabelsMatch,
   skillPreferredMatchesJob,
 } from "@/lib/fitNormalize";
 
@@ -237,6 +238,20 @@ function preferenceCoverage(
   return Math.min(1, Math.max(0, matched));
 }
 
+/**
+ * Conflict priority: Rejections.soft > Preferences > Capabilities.
+ * Drop skills that soft-reject so they do not also emit positive factors.
+ */
+function skillsWithoutSoftRejection(
+  skills: Weighted<ID>[],
+  softSkills: Weighted<ID>[] | undefined,
+): Weighted<ID>[] {
+  if (!softSkills?.length || skills.length === 0) return skills;
+  return skills.filter(
+    (s) => !softSkills.some((r) => skillLabelsMatch(s.value, r.value)),
+  );
+}
+
 function roleMatchScore(
   preferred: Weighted<ID>[],
   roleTitle: string,
@@ -426,11 +441,12 @@ function evaluateHardConstraints(
   }
 
   // Explicit Target roles only (not bookmark-inferred implicit roles).
-  // Location/work mode gate eligibility; explicit roles gate title family.
+  // Hard gate is title-family match — independent of preference weight.
   const targetRoles = explicitTargetRoles(signals.preferences.roles);
   if (targetRoles.length > 0) {
-    const roleScore = roleMatchScore(targetRoles, job.role_title);
-    const ok = roleScore != null && roleScore > 0;
+    const ok = targetRoles.some((r) =>
+      roleTitleMatches(job.role_title, r.value),
+    );
     breakdown.push({
       key: "role_constraint",
       score: ok ? 1 : 0,
@@ -497,12 +513,26 @@ function evaluateSoftFactors(
 
   // Preferences (pre-normalized — do NOT call normalizeWeights)
   // Role hard-gate is in evaluateHardConstraints; soft role score ranks matches.
+  // Soft-rejected skills must not also score positively (conflict priority).
+  const effectivePrefSkills = skillsWithoutSoftRejection(
+    pref.skills,
+    soft.skills,
+  );
+  const effectiveCapSkills = skillsWithoutSoftRejection(
+    cap.skills,
+    soft.skills,
+  );
+
   const role = roleMatchScore(pref.roles, job.role_title);
   if (role != null && role > 0) {
     pushFactor(out, "preference_role_match", role, W_ROLE, job.role_title);
   }
 
-  const skillPref = preferenceCoverage(pref.skills, job.tech_stack, true);
+  const skillPref = preferenceCoverage(
+    effectivePrefSkills,
+    job.tech_stack,
+    true,
+  );
   if (skillPref != null) {
     pushFactor(out, "preference_skill_match", skillPref, W_SKILL_PREF);
   }
@@ -550,7 +580,7 @@ function evaluateSoftFactors(
   }
 
   // Capabilities
-  const capSkills = capabilitySkillScore(cap.skills, jobSkills);
+  const capSkills = capabilitySkillScore(effectiveCapSkills, jobSkills);
   if (capSkills != null) {
     pushFactor(out, "capability_skill_match", capSkills, W_SKILL_CAP);
   }
