@@ -12,7 +12,7 @@ import {
 } from "@/lib/profileVocabulary";
 
 /** Bump when stack canonicalization rules change (invalidates Next data cache). */
-export const JOB_STACK_VOCAB_VERSION = 2;
+export const JOB_STACK_VOCAB_VERSION = 3;
 
 export type RawStackStatRow = { name: string; count: number };
 export type CanonicalStackOption = { name: string; count: number };
@@ -39,22 +39,10 @@ const RAW_STACK_STATS_SQL = `
   ORDER BY count DESC
 `;
 
-const SEARCH_RAW_STACK_SQL = `
-  SELECT DISTINCT j.value AS val
-  FROM jobs_structured, json_each(jobs_structured.tech_stack) AS j
-  WHERE jobs_structured.tech_stack IS NOT NULL
-    AND typeof(j.value) = 'text'
-    AND j.value != ''
-    AND LOWER(j.value) LIKE LOWER(?) ESCAPE '\\'
-  ORDER BY j.value
-  LIMIT 30
-`;
-
 export function jobTechStackQueries() {
   return {
     distinctRaw: DISTINCT_RAW_STACK_SQL,
     stats: RAW_STACK_STATS_SQL,
-    search: SEARCH_RAW_STACK_SQL,
   };
 }
 

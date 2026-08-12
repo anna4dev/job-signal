@@ -65,7 +65,7 @@ New client state must use versioned keys, coercion on read, and a custom `window
 | ----------------- | --------------------------------------------- |
 | Profile types     | `types/profile.ts`                            |
 | Explicit profile  | `lib/profile.ts`, `hooks/useExplicitProfile.ts` |
-| Profile vocabulary| `lib/profileVocabulary.ts`, `lib/jobTechStack.ts`, `lib/jobRequiredSkills.ts` |
+| Profile vocabulary| `lib/profileVocabulary.ts`, `lib/jobTechStack.ts`, `lib/jobTechStackCache.ts`, `lib/jobRequiredSkills.ts`, `lib/jobRequiredSkillsCache.ts`, `lib/jobStackClient.ts` |
 | Signal computation| `lib/signals.ts`                              |
 | Fit engine        | `lib/fit.ts`, `lib/fitNormalize.ts`, `lib/locationRegions.ts`, `types/fit.ts` |
 | Profile UI        | `app/profile/ProfileContent.tsx`              |
