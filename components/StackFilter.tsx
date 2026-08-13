@@ -2,11 +2,11 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-
-interface StackOption {
-  name: string;
-  count: number;
-}
+import {
+  loadJobStackOptions,
+  type StackOption,
+} from "@/lib/jobStackClient";
+import { filterCanonicalSkillNames } from "@/lib/skillChipSuggest";
 
 export default function StackFilter({
   value,
@@ -26,11 +26,8 @@ export default function StackFilter({
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch("/api/jobs/stack")
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) setOptions(data);
-      })
+    loadJobStackOptions()
+      .then(setOptions)
       .catch((err) => console.error("Fetch stacks failed", err));
   }, []);
 
@@ -76,13 +73,21 @@ export default function StackFilter({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const filteredOptions = options.filter(
-    (opt) =>
-      opt &&
-      opt.name &&
-      opt.name.toLowerCase().includes(query.toLowerCase()) &&
-      !selectedStacks.includes(opt.name),
-  );
+  const filteredOptions = useMemo(() => {
+    const available = options.filter(
+      (opt) => opt?.name && !selectedStacks.includes(opt.name),
+    );
+    const q = query.trim();
+    if (!q) return available;
+    const matched = new Set(
+      filterCanonicalSkillNames(
+        available.map((o) => o.name),
+        q,
+        100,
+      ),
+    );
+    return available.filter((o) => matched.has(o.name));
+  }, [options, query, selectedStacks]);
 
   return (
     <div className="space-y-3" ref={containerRef}>

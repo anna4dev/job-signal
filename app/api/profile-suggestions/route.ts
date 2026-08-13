@@ -1,5 +1,14 @@
 import { db } from "@/lib/db";
 import { NextRequest } from "next/server";
+import { JOB_STACK_VOCAB_VERSION } from "@/lib/jobTechStack";
+import {
+  filterCanonicalSkillSuggestions,
+} from "@/lib/jobRequiredSkills";
+import { getCanonicalRequiredSkillStats } from "@/lib/jobRequiredSkillsCache";
+import {
+  canonicalizeRolesForProfile,
+  profileTagKey,
+} from "@/lib/profileVocabulary";
 
 type SuggestionType = "skills" | "industries" | "roles" | "locations";
 
@@ -86,87 +95,72 @@ export async function GET(req: NextRequest) {
   }
   const type: SuggestionType = rawType;
 
-  const cacheKey = `${type}:${q.toLowerCase()}`;
+  const cacheKey =
+    type === "skills"
+      ? `skills:req:v${JOB_STACK_VOCAB_VERSION}:${q.toLowerCase()}`
+      : `${type}:${q.toLowerCase()}`;
   const cached = getCached(cacheKey);
   if (cached) return Response.json(cached);
-
-  // Escape SQL LIKE wildcards before composing the pattern. `q` is parameterized
-  // so SQL injection is impossible, but raw `%` / `_` are still treated as
-  // wildcards: a query of `%` would otherwise turn this endpoint into a top-N
-  // scan and surface non-literal matches. Pair with `ESCAPE '\\'` on each LIKE.
-  const pattern = `%${escapeLikePattern(q)}%`;
 
   try {
     let results: string[] = [];
 
     if (type === "skills") {
-      // Primary: company tech_stack JSON arrays (cleaner data).
-      // Secondary: jobs required_skills JSON arrays.
-      const [techRes, skillsRes] = await Promise.all([
-        db.execute({
-          sql: `SELECT DISTINCT je.value as val
-                FROM company_structured c, json_each(c.tech_stack) je
-                WHERE typeof(je.value) = 'text'
-                  AND LOWER(je.value) LIKE LOWER(?) ESCAPE '\\'
-                  AND je.value != ''
-                ORDER BY je.value
-                LIMIT 15`,
+      // Profile "My skills" ← jobs_structured.required_skills (canonical chips).
+      // Tech want/don't use /api/jobs/stack (job tech_stack), not this type.
+      const stats = await getCanonicalRequiredSkillStats();
+      results = filterCanonicalSkillSuggestions(stats, q, 10);
+    } else {
+      // Escape SQL LIKE wildcards before composing the pattern. `q` is parameterized
+      // so SQL injection is impossible, but raw `%` / `_` are still treated as
+      // wildcards: a query of `%` would otherwise turn this endpoint into a top-N
+      // scan and surface non-literal matches. Pair with `ESCAPE '\\'` on each LIKE.
+      const pattern = `%${escapeLikePattern(q)}%`;
+
+      if (type === "industries") {
+        const res = await db.execute({
+          sql: `SELECT DISTINCT industry as val
+                FROM company_structured
+                WHERE LOWER(industry) LIKE LOWER(?) ESCAPE '\\'
+                  AND industry IS NOT NULL AND industry != ''
+                ORDER BY industry
+                LIMIT 20`,
           args: [pattern],
-        }),
-        db.execute({
-          sql: `SELECT DISTINCT je.value as val
-                FROM jobs_structured j, json_each(j.required_skills) je
-                WHERE typeof(je.value) = 'text'
-                  AND LOWER(je.value) LIKE LOWER(?) ESCAPE '\\'
-                  AND je.value != ''
-                ORDER BY je.value
-                LIMIT 15`,
+        });
+        results = normalizeRows(res.rows, 10);
+      } else if (type === "roles") {
+        const res = await db.execute({
+          sql: `SELECT DISTINCT role_title as val
+                FROM jobs_structured
+                WHERE LOWER(role_title) LIKE LOWER(?) ESCAPE '\\'
+                  AND role_title IS NOT NULL AND role_title != ''
+                ORDER BY role_title
+                LIMIT 20`,
           args: [pattern],
-        }),
-      ]);
-      const seen = new Set<string>();
-      for (const row of [...techRes.rows, ...skillsRes.rows]) {
-        const v = typeof row.val === "string" ? row.val.trim() : null;
-        if (v && !seen.has(v.toLowerCase())) {
-          seen.add(v.toLowerCase());
-          results.push(v);
+        });
+        const roleSeen = new Set<string>();
+        results = [];
+        for (const label of normalizeRows(res.rows, 20).flatMap(
+          canonicalizeRolesForProfile,
+        )) {
+          const key = profileTagKey(label);
+          if (roleSeen.has(key)) continue;
+          roleSeen.add(key);
+          results.push(label);
+          if (results.length >= 10) break;
         }
+      } else if (type === "locations") {
+        const res = await db.execute({
+          sql: `SELECT DISTINCT location_country as val
+                FROM jobs_structured
+                WHERE LOWER(location_country) LIKE LOWER(?) ESCAPE '\\'
+                  AND location_country IS NOT NULL AND location_country != ''
+                ORDER BY location_country
+                LIMIT 20`,
+          args: [pattern],
+        });
+        results = normalizeRows(res.rows, 10);
       }
-      results = results.slice(0, 10);
-    } else if (type === "industries") {
-      const res = await db.execute({
-        sql: `SELECT DISTINCT industry as val
-              FROM company_structured
-              WHERE LOWER(industry) LIKE LOWER(?) ESCAPE '\\'
-                AND industry IS NOT NULL AND industry != ''
-              ORDER BY industry
-              LIMIT 20`,
-        args: [pattern],
-      });
-      results = normalizeRows(res.rows, 10);
-    } else if (type === "roles") {
-      const res = await db.execute({
-        sql: `SELECT DISTINCT role_title as val
-              FROM jobs_structured
-              WHERE LOWER(role_title) LIKE LOWER(?) ESCAPE '\\'
-                AND role_title IS NOT NULL AND role_title != ''
-              ORDER BY role_title
-              LIMIT 20`,
-        args: [pattern],
-      });
-      results = normalizeRows(res.rows, 10);
-    } else if (type === "locations") {
-      // Countries from the job board — already real/normalised values from postings.
-      const res = await db.execute({
-        sql: `SELECT DISTINCT location_country as val
-              FROM jobs_structured
-              WHERE LOWER(location_country) LIKE LOWER(?) ESCAPE '\\'
-                AND location_country IS NOT NULL AND location_country != ''
-              ORDER BY location_country
-              LIMIT 20`,
-        args: [pattern],
-      });
-      results = normalizeRows(res.rows, 10);
     }
 
     setCached(cacheKey, results);

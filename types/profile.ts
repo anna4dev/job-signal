@@ -70,6 +70,8 @@ export interface Capabilities {
 // RULE: Per-dimension sum(weight)=1 is enforced at write time in UnifiedSignals.
 // Preferences.skills.weight = desire-to-use (≠ Capabilities.skills.weight = proficiency).
 export interface Preferences {
+  // Non-empty explicit Target roles → fit() hard-fails unmatched titles
+  // (role_constraint). Implicit/bookmark-inferred roles do not gate.
   roles: Weighted<ID>[]; // weight = intent strength
   skills: Weighted<ID>[]; // weight = desire to use this technology
   industries: Weighted<ID>[];
@@ -166,6 +168,7 @@ export type FactorKey =
   | "visa_constraint"
   | "work_mode_constraint"
   | "location_constraint"
+  | "role_constraint"
   | "hard_rejection_industry"
   | "hard_rejection_company"
   | "capability_skill_match" // proficiency × job required_skills

@@ -39,6 +39,14 @@ New client state must use versioned keys, coercion on read, and a custom `window
 - **Capabilities are never inferred from behavior** — skills, seniority, years must be self-declared.
 - **Assist-fill ≠ implicit signals** — Profile suggestion `source: 'implicit'` marks explicit profile fields the user applied; that is different from `ImplicitSignals` in `lib/signals.ts`.
 - **Conflict priority:** `Rejections.soft` > `Preferences` > `Capabilities` (resolved at merge time for skills).
+- **Location / work mode / visa are eligibility gates only** — passing them does not imply a good fit. Soft ranking is dominated by **target roles + skills**; industry/level/size are secondary.
+- **Non-empty explicit Target roles are a hard title filter** — only `source !== "implicit"` roles gate `role_title` (`role_constraint`). Bookmark-inferred implicit roles never hard-fail. Job-side role/stack matching uses `lib/fitNormalize.ts`. Empty explicit roles skip the gate; skills then dominate soft ranking. Secondary prefs (industry/size/funding) only boost when they hit — zeros do not drag the average.
+- **Profile vocabulary 收口** — skills/roles canonicalized on write (`lib/profileVocabulary.ts`). Field ↔ job column mapping:
+  - **My skills** (`capabilities.skills`) ← `jobs_structured.required_skills` (may include soft skills / domain; chip 收口 via `canonicalizeSkillsForProfile`; suggestions: `/api/profile-suggestions?type=skills` → `getCanonicalRequiredSkillStats()`).
+  - **Tech I want / don't want** (`preferences.skills` / `rejections.soft.skills`) ← `jobs_structured.tech_stack`; **same source + cache as homepage Tech Stack filter** (`/api/jobs/stack` → `getCanonicalJobStackStats()` in `lib/jobTechStackCache.ts`). Bump `JOB_STACK_VOCAB_VERSION` when stack/skill chip rules change.
+  - **Company `tech_stack`** is company-page / enrichment only — not profile fit chips or homepage filter.
+  - Fit: capabilities score `required_skills` (fallback `tech_stack`); preferences/rejections soft-skills score `tech_stack`.
+  - Roles are **rules-first** (strip specialty tails / seniority / plurals; language-primary → `{Lang} Engineer`); only a small family map covers ambiguous brands. Job-side JD matching stays in `lib/fitNormalize.ts`.
 - **Location allow-list is geographic when the JD states geography** — remote/onsite/hybrid with a country/city must overlap `hardConstraints.locations.allow` (e.g. Singapore profile ≠ US-only remote). Macro regions expand via `lib/locationRegions.ts` (`EU` includes Germany; `EMEA` includes Europe + Middle East + Africa; `NA` includes US/Canada/Mexico). Do **not** treat “work mode includes remote” as worldwide location pass.
 - **Remote with no country/city passes location** — JD did not constrain hire-from region (UI “Location N/A”); profile allow-list must not hard-fail these.
 - **Job visa unlocks relocation, not remote geography** — onsite/hybrid with `location_visa_supported` may pass location even when the job country is outside the allow-list (US/UK + visa can fit a non-local profile). Visa does **not** bypass location for remote roles that name a country.
@@ -57,8 +65,9 @@ New client state must use versioned keys, coercion on read, and a custom `window
 | ----------------- | --------------------------------------------- |
 | Profile types     | `types/profile.ts`                            |
 | Explicit profile  | `lib/profile.ts`, `hooks/useExplicitProfile.ts` |
+| Profile vocabulary| `lib/profileVocabulary.ts`, `lib/jobTechStack.ts`, `lib/jobTechStackCache.ts`, `lib/jobRequiredSkills.ts`, `lib/jobRequiredSkillsCache.ts`, `lib/jobStackClient.ts` |
 | Signal computation| `lib/signals.ts`                              |
-| Fit engine        | `lib/fit.ts`, `lib/locationRegions.ts`, `types/fit.ts` |
+| Fit engine        | `lib/fit.ts`, `lib/fitNormalize.ts`, `lib/locationRegions.ts`, `types/fit.ts` |
 | Profile UI        | `app/profile/ProfileContent.tsx`              |
 | Companies         | `lib/companies.ts`, `lib/companyIndexable.ts`, `lib/dbCoerce.ts`, `lib/companyJobRows.ts`, `lib/companyAggregates.ts`, `lib/companyEvidence.ts`, `lib/companyLongHorizon.ts`, `lib/companyEvents.ts`, `app/companies/` |
 | Assist-fill       | `lib/profileSuggestions.ts`                     |

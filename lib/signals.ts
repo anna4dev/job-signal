@@ -10,6 +10,7 @@ import type {
 import type { BookmarkItem, BookmarkStatus } from "@/types/job";
 import type { SavedSearchItem } from "@/hooks/useSavedSearches";
 import type { BookmarkJobSignalContext } from "@/types/signals";
+import { normalizeSkillKey } from "@/lib/fitNormalize";
 export { FACTOR_FIELD_MAP, factorJobField } from "@/lib/factorMap";
 export type { FactorJobField } from "@/lib/factorMap";
 
@@ -32,6 +33,11 @@ const APPLIED_STATUSES: BookmarkStatus[] = [
 // soft rejections silently fail to remove preferred skills.
 function canonicalId(v: string): string {
   return v.trim().toLowerCase();
+}
+
+/** Skill merge/reject keys use normalizeSkillKey so nodejs ≡ Node.js. */
+function skillMergeKey(v: string): string {
+  return normalizeSkillKey(v) || canonicalId(v);
 }
 
 function bookmarkSignalWeight(status?: BookmarkStatus): number {
@@ -139,16 +145,26 @@ export function mergePreferences(
     explicitList: Weighted<ID>[],
     implicitList: Weighted<ID>[] | undefined,
     rejectedIds: Set<string>,
+    keyOf: (v: string) => string = canonicalId,
   ): Weighted<ID>[] {
-    // Step 1: groupBy(canonicalId(value)) — use canonical key, preserve first-seen value
+    // Step 1: groupBy(key) — preserve first-seen value; accumulate duplicate weights
     const map = new Map<string, Weighted<ID>>();
 
     for (const item of explicitList) {
-      map.set(canonicalId(item.value), { ...item, source: "explicit" });
+      const key = keyOf(item.value);
+      const existing = map.get(key);
+      if (existing) {
+        map.set(key, {
+          ...existing,
+          weight: Math.min(1, existing.weight + item.weight),
+        });
+      } else {
+        map.set(key, { ...item, source: "explicit" });
+      }
     }
 
     for (const item of implicitList ?? []) {
-      const key = canonicalId(item.value);
+      const key = keyOf(item.value);
       const existing = map.get(key);
       if (existing) {
         // explicit item exists: small augmentation, capped at 1
@@ -167,10 +183,8 @@ export function mergePreferences(
     }
 
     // Step 2: remove items that appear in rejections (conflict priority)
-    // Compare via canonical IDs so "React" preference + "react" soft rejection
-    // resolve to the same key.
     const merged = Array.from(map.values()).filter(
-      (item) => !rejectedIds.has(canonicalId(item.value)),
+      (item) => !rejectedIds.has(keyOf(item.value)),
     );
 
     // Step 3: normalize per-dimension
@@ -178,12 +192,17 @@ export function mergePreferences(
   }
 
   const rejectedSkillIds = new Set(
-    (rejections.soft.skills ?? []).map((s) => canonicalId(s.value)),
+    (rejections.soft.skills ?? []).map((s) => skillMergeKey(s.value)),
   );
 
   return {
     roles: mergeList(explicit.roles, implicit.roles, new Set()),
-    skills: mergeList(explicit.skills, implicit.skills, rejectedSkillIds),
+    skills: mergeList(
+      explicit.skills,
+      implicit.skills,
+      rejectedSkillIds,
+      skillMergeKey,
+    ),
     industries: mergeList(explicit.industries, implicit.industries, new Set()),
     companySizes: mergeList(
       explicit.companySizes,

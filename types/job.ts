@@ -43,6 +43,8 @@ export interface JobWithCompany {
   post_at: string;
   /** From jobs_structured when selected via j.*. */
   work_style?: string | null;
+  /** From jobs_structured when selected via j.* — fit capabilities prefer this over tech_stack. */
+  required_skills?: string;
 
   // data from company_structured
   company_name: string;
