@@ -108,13 +108,17 @@ function CollapsibleSection({
   onToggle: () => void;
   children: React.ReactNode;
 }) {
+  // No overflow-hidden on the card: TagSelect popups are absolutely positioned
+  // and must escape it. Corners are rounded on the header button instead.
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div className="bg-white border border-slate-200 rounded-xl">
       <button
         type="button"
         aria-expanded={open}
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-slate-50 transition-colors"
+        className={`w-full flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-slate-50 transition-colors ${
+          open ? "rounded-t-xl" : "rounded-xl"
+        }`}
       >
         <div className="flex items-center gap-3">
           <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">
