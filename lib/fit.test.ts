@@ -112,6 +112,121 @@ describe("fit()", () => {
     expect(result.hardFail).toBe(false);
   });
 
+  it("matches UK/EU remote compound against an EU allow-list", () => {
+    // Fliplet-style JD: location_country stored as "UK/EU", not a single country.
+    const result = fit(
+      baseJob({
+        location_country: "UK/EU",
+        location_city: null,
+        location_remote: 1,
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["remote"] },
+          locations: {
+            allow: [{ scope: "region", id: "EU" }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFailReasons).not.toContain("location_constraint");
+  });
+
+  it("matches job-side Europe / EU labels against an EU allow-list", () => {
+    for (const country of ["EU", "Europe", "EMEA"]) {
+      const result = fit(
+        baseJob({
+          location_country: country,
+          location_remote: 1,
+        }),
+        emptySignals({
+          hardConstraints: {
+            visa: { required: false },
+            work: { modes: ["remote"] },
+            locations: {
+              allow: [{ scope: "region", id: "EU" }],
+            },
+            employmentTypes: [],
+          },
+        }),
+      );
+      expect(result.hardFailReasons, country).not.toContain("location_constraint");
+    }
+  });
+
+  it("matches multi-region remote compounds against an EU allow-list", () => {
+    // Real jobs_structured values: JD lists several hire-from regions.
+    for (const country of [
+      "Europe/US",
+      "EU/UK",
+      "EU or UK",
+      "US, UK, EU",
+      "EU, Switzerland, Norway",
+      "USA or Europe",
+      "Central/Eastern Europe",
+      "France/UK",
+    ]) {
+      const result = fit(
+        baseJob({ location_country: country, location_remote: 1 }),
+        emptySignals({
+          hardConstraints: {
+            visa: { required: false },
+            work: { modes: ["remote"] },
+            locations: {
+              allow: [{ scope: "region", id: "EU" }],
+            },
+            employmentTypes: [],
+          },
+        }),
+      );
+      expect(result.hardFailReasons, country).not.toContain(
+        "location_constraint",
+      );
+    }
+  });
+
+  it("still hard-fails non-EU remote compounds against an EU allow-list", () => {
+    for (const country of ["US/Canada", "AU or NZ", "USA / Japan"]) {
+      const result = fit(
+        baseJob({ location_country: country, location_remote: 1 }),
+        emptySignals({
+          hardConstraints: {
+            visa: { required: false },
+            work: { modes: ["remote"] },
+            locations: {
+              allow: [{ scope: "region", id: "EU" }],
+            },
+            employmentTypes: [],
+          },
+        }),
+      );
+      expect(result.hardFailReasons, country).toContain("location_constraint");
+    }
+  });
+
+  it("still hard-fails UK-only remote against an EU allow-list", () => {
+    // UK is Europe/EMEA, not EU membership — pure UK must not pass via "eu"⊂"uk".
+    const result = fit(
+      baseJob({
+        location_country: "UK",
+        location_remote: 1,
+      }),
+      emptySignals({
+        hardConstraints: {
+          visa: { required: false },
+          work: { modes: ["remote"] },
+          locations: {
+            allow: [{ scope: "region", id: "EU" }],
+          },
+          employmentTypes: [],
+        },
+      }),
+    );
+    expect(result.hardFailReasons).toContain("location_constraint");
+  });
+
   it("matches Germany under an EU region allow-list", () => {
     const result = fit(
       baseJob({

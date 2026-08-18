@@ -13,7 +13,7 @@ import type {
   FitResult,
 } from "@/types/fit";
 import { parseTechStackField } from "@/lib/parseJobFields";
-import { canonCountry, countryInAllowRegion } from "@/lib/locationRegions";
+import { jobGeoOverlapsAllow, splitGeoTokens } from "@/lib/locationRegions";
 import {
   roleTitleMatches,
   skillLabelsMatch,
@@ -99,18 +99,23 @@ function isRemoteAnywhereId(id: string): boolean {
   );
 }
 
-/** Direct country/city token match, alias canon, or macro-region membership. */
+/**
+ * Country/city vs allow id. Compounds like "UK/EU" are OR-split; job-side
+ * region labels (EU, Europe, EMEA) intersect profile regions. Short codes
+ * like "eu" must not rely on substring fuzzy match (MIN_FUZZY_LEN).
+ */
 function geoMatchesSpec(
   country: string,
   city: string,
   specId: string,
 ): boolean {
-  if (country) {
-    if (tokensMatch(country, specId)) return true;
-    if (canonCountry(country) === canonCountry(specId)) return true;
-    if (countryInAllowRegion(country, specId)) return true;
+  if (jobGeoOverlapsAllow(country, city, specId)) return true;
+  // Fuzzy city fallback for free-text cities outside region tables.
+  if (city) {
+    for (const part of splitGeoTokens(city)) {
+      if (tokensMatch(part, specId)) return true;
+    }
   }
-  if (city && tokensMatch(city, specId)) return true;
   return false;
 }
 

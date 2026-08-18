@@ -207,7 +207,10 @@ export function regionKeyFor(allowId: string): string | null {
   if (id === "uk" || id === "united kingdom") return "uk";
   if (id === "apac" || id === "asia pacific") return "apac";
   if (id === "south asia") return "south asia";
-  return REGION_MEMBERS[id] ? id : null;
+  if (REGION_MEMBERS[id]) return id;
+  // JD sub-region phrasing ("Central Europe", "Eastern Europe") — still Europe.
+  if (/(^|\s)europe$/.test(id)) return "europe";
+  return null;
 }
 
 /** True when the value is a known macro region (store as LocationSpec scope region). */
@@ -225,4 +228,61 @@ export function countryInAllowRegion(country: string, allowId: string): boolean 
   const members = REGION_MEMBERS[key];
   if (!members) return false;
   return members.includes(canonCountry(country));
+}
+
+/** Split JD compounds like "UK/EU", "US, Canada", "Germany or Netherlands". */
+export function splitGeoTokens(raw: string): string[] {
+  return canonical(raw)
+    .split(/[/|,;&+]|(?:\s+or\s+)|(?:\s+and\s+)/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+function regionsShareMember(a: string, b: string): boolean {
+  const membersA = REGION_MEMBERS[a];
+  const membersB = REGION_MEMBERS[b];
+  if (!membersA || !membersB) return false;
+  const setB = new Set(membersB);
+  return membersA.some((m) => setB.has(m));
+}
+
+/**
+ * One job geo token vs one profile allow id: country↔country, country∈region,
+ * or region↔region intersection (EU profile matches job "Europe" / "UK/EU").
+ */
+export function geoTokenOverlapsAllow(
+  jobToken: string,
+  allowId: string,
+): boolean {
+  const token = canonical(jobToken);
+  const allow = canonical(allowId);
+  if (!token || !allow) return false;
+
+  if (token === allow) return true;
+  if (canonCountry(token) === canonCountry(allow)) return true;
+
+  const jobRegion = regionKeyFor(token);
+  const allowRegion = regionKeyFor(allow);
+
+  if (jobRegion && allowRegion) {
+    if (jobRegion === allowRegion) return true;
+    return regionsShareMember(jobRegion, allowRegion);
+  }
+  if (allowRegion && countryInAllowRegion(token, allow)) return true;
+  if (jobRegion && countryInAllowRegion(allow, token)) return true;
+
+  return false;
+}
+
+/** OR across slash/comma compounds in country and city fields. */
+export function jobGeoOverlapsAllow(
+  country: string | null | undefined,
+  city: string | null | undefined,
+  allowId: string,
+): boolean {
+  const tokens = [
+    ...splitGeoTokens(country ?? ""),
+    ...splitGeoTokens(city ?? ""),
+  ];
+  return tokens.some((t) => geoTokenOverlapsAllow(t, allowId));
 }
